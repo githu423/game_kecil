@@ -24,9 +24,17 @@
         </div>
         <p class="pa-header__status">
           <span class="pa-dot" id="paPyDot" data-stage="idle" aria-hidden="true"></span>
-          <!-- Teks status diperbarui lewat textContent, jadi titik status dipisah
-               supaya tidak ikut terhapus. -->
-          <span id="paStatus" role="status">Memuat Python…</span>
+          <!-- Teks status diperbarui lewat textContent, jadi titik status dan bilah
+               progres dipisah supaya tidak ikut terhapus. -->
+          <span id="paStatus" role="status">Python belum dimuat</span>
+          <progress
+            class="pa-progress"
+            id="paPyProgress"
+            max="100"
+            value="0"
+            aria-label="Progres memuat Python"
+            hidden
+          ></progress>
         </p>
       </div>
     </header>
@@ -85,8 +93,14 @@
             <button class="btn" id="paStep" type="button">⏭ Step</button>
             <button class="btn btn-ghost" id="paHelp" type="button">📖 Fungsi</button>
             <button class="btn btn-ghost" id="paRestoreStarter" type="button">Kode awal</button>
-            <button class="btn btn-ghost" id="paRetryPy" type="button" hidden>
-              Muat ulang Python
+            <button
+              class="btn btn-ghost"
+              id="paRetryPy"
+              type="button"
+              title="Buang worker lama lalu muat Python dari awal"
+              hidden
+            >
+              🔄 Coba lagi (muat ulang Python)
             </button>
           </div>
         </div>
@@ -113,7 +127,7 @@
             autocorrect="off"
             wrap="off"
             rows="12"
-            placeholder="# Tulis kodemu di sini, contoh:&#10;move_right()&#10;move_right()"
+            placeholder="# Tulis kodemu di sini, contoh:&#10;move_right(2)&#10;move_down()"
           ></textarea>
         </div>
 
@@ -136,9 +150,11 @@
         </div>
 
         <p class="pa-note">
-          Python (Pyodide) dimuat hanya di halaman ini, langsung dari CDN
-          <code>cdn.jsdelivr.net/pyodide</code> dengan versi yang dipin. Jadi butuh koneksi
-          internet pada kali pertama memuat.
+          Python (Pyodide <strong>314.0.7</strong>) dimuat hanya di halaman ini. Sumber pertama
+          adalah salinan lokal <code>vendor/pyodide/</code> (tanpa internet); kalau tidak ada,
+          halaman beralih ke CDN <code>cdn.jsdelivr.net/pyodide</code> lalu
+          <code>unpkg.com</code>. Status pemuatan tampil di kanan atas (unduh → siapkan → siap),
+          dan berhenti otomatis setelah 45 detik dengan tombol “Coba lagi”.
         </p>
       </section>
     </main>

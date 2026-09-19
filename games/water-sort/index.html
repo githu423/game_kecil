@@ -52,6 +52,13 @@
           Pilih satu botol, lalu pilih botol tujuan.
         </p>
 
+        <ul class="ws-legend">
+          <li><span class="ws-legend__mark" aria-hidden="true">2/4</span> ruang terisi dari 4 slot</li>
+          <li><span class="ws-legend__mark ws-legend__mark--empty" aria-hidden="true"></span> botol kosong (tepi putus-putus)</li>
+          <li><span class="ws-legend__mark ws-legend__mark--done" aria-hidden="true">✓</span> botol selesai</li>
+          <li><span class="ws-legend__mark ws-legend__mark--target" aria-hidden="true"></span> tujuan yang sah</li>
+        </ul>
+
         <div class="ws-win" id="wsWin" hidden role="dialog" aria-labelledby="wsWinText" aria-modal="false">
           <p class="ws-win__text" id="wsWinText">🎉 Level selesai!</p>
           <div class="row">
@@ -74,7 +81,7 @@
 
         <label class="ws-toggle">
           <input type="checkbox" id="wsAccessible" />
-          <span>Mode aksesibel (tambah simbol &amp; pola warna)</span>
+          <span>Mode aksesibel (tambah simbol, pola warna, dan garis slot)</span>
         </label>
 
         <h2 class="ws-h2">Level</h2>
@@ -87,7 +94,14 @@
         <h2 class="ws-h2">Cara bermain</h2>
         <ul class="ws-rules">
           <li>Ketuk botol untuk memilih, ketuk botol lain untuk menuang.</li>
-          <li>Hanya bisa menuang ke botol kosong atau ke warna yang sama.</li>
+          <li>
+            Botol punya 4 slot tetap: angka seperti <strong>2/4</strong> di bawah botol menunjukkan
+            ruang yang masih kosong.
+          </li>
+          <li>
+            Hanya bisa menuang ke botol kosong atau ke warna yang sama. Setelah memilih botol,
+            tujuan yang sah disorot dan yang lain diredupkan.
+          </li>
           <li>Menuang ke botol yang tidak cocok hanya membuat botol bergetar.</li>
           <li>Salah langkah tidak apa-apa: tekan ↶ Batal untuk kembali ke langkah sebelumnya.</li>
           <li>Menang kalau setiap botol kosong atau berisi satu warna penuh.</li>

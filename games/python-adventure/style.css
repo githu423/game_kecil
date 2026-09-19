@@ -148,6 +148,35 @@
   background: var(--danger);
 }
 
+/* Bilah progres unduhan Python (tampil hanya saat memuat). */
+.pa-progress {
+  width: 7rem;
+  height: 0.55rem;
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  background: var(--surface-2);
+  overflow: hidden;
+  accent-color: var(--accent);
+}
+
+.pa-progress[hidden] {
+  display: none;
+}
+
+.pa-progress::-webkit-progress-bar {
+  background: var(--surface-2);
+}
+
+.pa-progress::-webkit-progress-value {
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
+.pa-progress::-moz-progress-bar {
+  background: var(--accent);
+}
+
 @keyframes pa-pulse {
   0%,
   100% {

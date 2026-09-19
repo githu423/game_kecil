@@ -12,6 +12,19 @@
 
 import { DIRECTIONS, GameEngine, TILES, applyEventToView, createView, parseLevel } from "./engine.js";
 import { LEVELS, LEVEL_COUNT, getLevel, listLevels } from "./levels.js";
+import {
+  LOAD_LIMITS,
+  LIMITS,
+  PYODIDE_FILES,
+  PYODIDE_SOURCES,
+  PYODIDE_TOTAL_BYTES,
+  PYODIDE_VERSION,
+  PYTHON_PRELUDE,
+  PyodideLoadError,
+  formatBytes,
+  parsePythonError,
+  prefetchSource,
+} from "./runner.js";
 
 /* -----------------------------------------------------------------------------
    Kerangka pengujian ringkas (sama gaya dengan Water Sort)
@@ -19,11 +32,22 @@ import { LEVELS, LEVEL_COUNT, getLevel, listLevels } from "./levels.js";
 
 function makeReporter() {
   const results = [];
+  const pending = [];
   return {
     results,
+    // Mendukung pengujian sinkron maupun async; hasil tetap dicatat berurutan.
     check(name, fn) {
       try {
-        fn();
+        const hasil = fn();
+        if (hasil && typeof hasil.then === "function") {
+          pending.push(
+            hasil.then(
+              () => results.push({ name, ok: true, message: "" }),
+              (error) => results.push({ name, ok: false, message: error?.message ?? String(error) }),
+            ),
+          );
+          return;
+        }
         results.push({ name, ok: true, message: "" });
       } catch (error) {
         results.push({ name, ok: false, message: error?.message ?? String(error) });
@@ -39,6 +63,10 @@ function makeReporter() {
     },
     notOk(value, label = "") {
       if (value) throw new Error(`${label} diharapkan false, ternyata ${JSON.stringify(value)}`);
+    },
+    /** Menunggu semua pengujian async selesai sebelum ringkasan dihitung. */
+    async done() {
+      await Promise.all(pending);
     },
   };
 }
@@ -56,7 +84,7 @@ function makeEngine(grid, facing = "down") {
  * Menjalankan semua pengujian engine + validasi level.
  * @returns {{total:number, passed:number, failed:number, results:Array<{name:string, ok:boolean, message:string}>}}
  */
-export function runEngineTests() {
+export async function runEngineTests() {
   const t = makeReporter();
 
   /* ---------------- data level ---------------- */
@@ -299,6 +327,122 @@ export function runEngineTests() {
     t.equal(gagal, 2, "dua level tidak sah ditolak");
   });
 
+  /* ------------------------- pemuatan Pyodide (tanpa jaringan) ------------------------- */
+
+  t.check("Pyodide: versi dipin dan urutan sumber (lokal lebih dulu)", () => {
+    t.equal(PYODIDE_VERSION, "314.0.7", "versi dipin");
+    t.equal(PYODIDE_SOURCES[0].id, "lokal", "sumber pertama");
+    t.ok(PYODIDE_SOURCES[0].indexURL.endsWith("vendor/pyodide/"), "sumber lokal = vendor/pyodide/");
+    t.ok(PYODIDE_SOURCES[0].indexURL.endsWith("/vendor/pyodide/"), "berakhir di vendor/pyodide/");
+    t.equal(PYODIDE_SOURCES[1].id, "jsdelivr", "cadangan pertama");
+    t.ok(PYODIDE_SOURCES[1].indexURL.includes(`/v${PYODIDE_VERSION}/full/`), "folder CDN jsDelivr");
+    t.equal(PYODIDE_SOURCES[2].id, "unpkg", "cadangan kedua");
+    t.ok(PYODIDE_SOURCES[2].indexURL.includes(`pyodide@${PYODIDE_VERSION}`), "versi di unpkg");
+  });
+
+  t.check("Pyodide: daftar berkas + total byte sesuai rilis 314.0.7", () => {
+    const nama = PYODIDE_FILES.map((file) => file.name);
+    t.equal(nama, ["pyodide.asm.wasm", "python_stdlib.zip", "pyodide.asm.mjs", "pyodide-lock.json"], "berkas");
+    t.equal(PYODIDE_FILES[0].bytes, 9598218, "ukuran wasm");
+    t.equal(
+      PYODIDE_TOTAL_BYTES,
+      PYODIDE_FILES.reduce((total, file) => total + file.bytes, 0),
+      "total = jumlah berkas",
+    );
+    t.ok(PYODIDE_TOTAL_BYTES > 13000000 && PYODIDE_TOTAL_BYTES < 14000000, "total sekitar 13,5 MB");
+  });
+
+  t.check("formatBytes: teks Indonesia dengan koma", () => {
+    t.equal(formatBytes(950), "950 B", "byte");
+    t.equal(formatBytes(119077), "119,1 kB", "kilobyte");
+    t.equal(formatBytes(4200000), "4,2 MB", "megabyte");
+    t.equal(formatBytes(PYODIDE_TOTAL_BYTES), "13,5 MB", "total unduhan");
+  });
+
+  t.check("batas waktu pemuatan wajar (tidak menggantung selamanya)", () => {
+    t.equal(LOAD_LIMITS.totalTimeoutMs, 45000, "batas total 45 detik");
+    t.ok(LOAD_LIMITS.stallTimeoutMs < LOAD_LIMITS.totalTimeoutMs, "batas macet lebih pendek");
+    t.ok(LOAD_LIMITS.readyTimeoutMs > LOAD_LIMITS.totalTimeoutMs, "pengaman worker di atas batas total");
+    t.ok(LOAD_LIMITS.stallTimeoutMs >= 5000, "batas macet tidak terlalu ketat");
+  });
+
+  t.check("prefetchSource: melaporkan progres byte yang nyata", async () => {
+    const dikunjungi = [];
+    const fetchImpl = async (url) => {
+      dikunjungi.push(url);
+      const ukuran = 1000; // berkas tiruan: 1000 byte
+      return new Response(new Uint8Array(ukuran), {
+        status: 200,
+        headers: { "content-length": String(ukuran) },
+      });
+    };
+    const progres = [];
+    const total = await prefetchSource(
+      { id: "uji", label: "uji", indexURL: "http://contoh.test/" },
+      { fetchImpl, onProgress: (info) => progres.push(info) },
+    );
+    t.equal(dikunjungi.length, PYODIDE_FILES.length, "semua berkas besar diunduh");
+    t.equal(total, 1000 * PYODIDE_FILES.length, "total byte terbaca");
+    t.equal(progres.length, PYODIDE_FILES.length, "progres dilaporkan per berkas");
+    t.equal(progres.at(-1).total, PYODIDE_TOTAL_BYTES, "pembagi persen = perkiraan total");
+    t.ok(progres.at(-1).received > progres[0].received, "byte bertambah");
+  });
+
+  t.check("prefetchSource: berkas tidak ada → error jelas (bukan menggantung)", async () => {
+    const fetchImpl = async (url) => new Response("tidak ada", { status: 404 });
+    let pesan = "";
+    try {
+      await prefetchSource({ id: "uji", label: "uji", indexURL: "http://contoh.test/" }, { fetchImpl });
+    } catch (error) {
+      pesan = String(error.message);
+    }
+    t.ok(pesan.includes("404"), `pesan error: ${pesan}`);
+  });
+
+  t.check("PyodideLoadError: laporan teknis menyebut tiap sumber", () => {
+    const error = new PyodideLoadError("semua gagal", [
+      { id: "lokal", label: "salinan lokal", ok: false, ms: 12, error: "HTTP 404" },
+      { id: "jsdelivr", label: "CDN jsDelivr", ok: true, ms: 800 },
+    ]);
+    const laporan = error.technicalReport();
+    t.ok(laporan.includes("salinan lokal") && laporan.includes("HTTP 404"), "percobaan gagal muncul");
+    t.ok(laporan.includes("CDN jsDelivr") && laporan.includes("berhasil"), "percobaan berhasil muncul");
+    t.equal(error.name, "PyodideLoadError", "nama error");
+  });
+
+  t.check("prelude: move_* menerima jumlah langkah (move_down(2))", () => {
+    for (const nama of ["move_up", "move_down", "move_left", "move_right"]) {
+      t.ok(PYTHON_PRELUDE.includes(`def ${nama}(langkah=1):`), `${nama}(langkah=1)`);
+    }
+    t.ok(PYTHON_PRELUDE.includes("_MAKS_LANGKAH = 50"), "batas 50 langkah per perintah");
+    t.ok(PYTHON_PRELUDE.includes("class ArgumenError(Exception)"), "error argumen khusus");
+    t.ok(PYTHON_PRELUDE.includes("if not __api_move__(arah, baris):"), "berhenti saat tertabrak");
+    t.ok(PYTHON_PRELUDE.includes("isinstance(langkah, bool)"), "True/False ditolak sebagai angka");
+    t.ok(PYTHON_PRELUDE.includes("move_down(2)"), "contoh di bantuan()");
+  });
+
+  t.check("ArgumenError diterjemahkan ke pesan Indonesia + nomor baris", () => {
+    const traceback = [
+      'Traceback (most recent call last):',
+      '  File "<kodemu>", line 3, in <module>',
+      '    move_down(0)',
+      '  File "<sistem>", line 61, in move_down',
+      '    _gerak("down", langkah, "move_down", _inspect.currentframe().f_back.f_lineno)',
+      'ArgumenError: Jumlah langkah pada move_down() minimal 1, contoh: move_down(1).',
+    ].join("\n");
+    const parsed = parsePythonError(traceback);
+    t.equal(parsed.type, "ArgumenError", "jenis error");
+    t.equal(parsed.line, 3, "nomor baris kode pemain");
+    t.ok(parsed.friendly.includes("minimal 1"), `pesan ramah: ${parsed.friendly}`);
+    t.ok(!parsed.friendly.includes("Traceback"), "pesan ramah tidak menampilkan traceback");
+  });
+
+  t.check("batas aksi tetap 500 dan berlaku per langkah", () => {
+    t.equal(LIMITS.maxActions, 500, "batas aksi");
+    t.equal(LIMITS.timeoutMs, 5000, "batas waktu 5 detik");
+  });
+
+  await t.done(); // pengujian pemuatan Pyodide berjalan async
   const passed = t.results.filter((item) => item.ok).length;
   return {
     total: t.results.length,
@@ -320,7 +464,7 @@ if (isNode) {
   const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 
   if (invokedDirectly) {
-    const summary = runEngineTests();
+    const summary = await runEngineTests();
     for (const item of summary.results) {
       console.log(`[${item.ok ? "  ok  " : " FAIL "}] ${item.name}${item.ok ? "" : ` -> ${item.message}`}`);
     }

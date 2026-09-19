@@ -18,17 +18,68 @@
 import { GameEngine, isValidDirection } from "./engine.js";
 
 /* -----------------------------------------------------------------------------
-   Konfigurasi (CDN dipin ke satu versi)
+   Konfigurasi Pyodide (versi dipin di satu tempat)
    ----------------------------------------------------------------------------- */
 
-/** Versi Pyodide yang dipin. Jangan diubah tanpa menguji ulang. */
+/** Versi Pyodide yang dipin. Kalau diubah, jalankan ulang scripts/download-pyodide.mjs. */
 export const PYODIDE_VERSION = "314.0.7";
 
-/** Folder distribusi Pyodide di CDN. */
-export const PYODIDE_INDEX_URL = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
+/** Salinan lokal di dalam repo (sumber utama, tidak butuh internet). */
+export const PYODIDE_LOCAL_INDEX_URL = new URL("../../vendor/pyodide/", import.meta.url).href;
 
-/** Modul loader ESM Pyodide. */
-export const PYODIDE_MODULE_URL = `${PYODIDE_INDEX_URL}pyodide.mjs`;
+/** Folder Pyodide di CDN resmi jsDelivr (cadangan pertama). */
+export const PYODIDE_CDN_INDEX_URL = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
+
+/** Folder Pyodide di CDN unpkg (cadangan kedua, isi paket npm yang sama). */
+export const PYODIDE_UNPKG_INDEX_URL = `https://unpkg.com/pyodide@${PYODIDE_VERSION}/`;
+
+/**
+ * Daftar sumber Pyodide, diurutkan dari yang paling diutamakan.
+ * Salinan lokal selalu dicoba lebih dulu; CDN hanya cadangan kalau lokal tidak ada.
+ * indexURL harus diakhiri "/" karena Pyodide mencari berkasnya secara relatif.
+ */
+export const PYODIDE_SOURCES = Object.freeze([
+  { id: "lokal", label: "salinan lokal (vendor/pyodide)", indexURL: PYODIDE_LOCAL_INDEX_URL },
+  { id: "jsdelivr", label: "CDN jsDelivr", indexURL: PYODIDE_CDN_INDEX_URL },
+  { id: "unpkg", label: "CDN unpkg", indexURL: PYODIDE_UNPKG_INDEX_URL },
+]);
+
+/** Tetap diekspor untuk kompatibilitas: loader ESM di CDN resmi. */
+export const PYODIDE_INDEX_URL = PYODIDE_CDN_INDEX_URL;
+export const PYODIDE_MODULE_URL = `${PYODIDE_CDN_INDEX_URL}pyodide.mjs`;
+
+/**
+ * Berkas yang diunduh Pyodide dari indexURL. Ukurannya (byte) dipakai untuk
+ * menampilkan progres unduhan, mis. "6,1 dari 13,5 MB". Angka ini adalah ukuran
+ * asli rilis 314.0.7 (sama untuk salinan lokal maupun CDN).
+ */
+export const PYODIDE_FILES = Object.freeze([
+  { name: "pyodide.asm.wasm", bytes: 9598218 },
+  { name: "python_stdlib.zip", bytes: 2545637 },
+  { name: "pyodide.asm.mjs", bytes: 1250344 },
+  { name: "pyodide-lock.json", bytes: 119077 },
+]);
+
+/** Perkiraan total byte yang harus diunduh (dasar persentase progres). */
+export const PYODIDE_TOTAL_BYTES = PYODIDE_FILES.reduce((total, file) => total + file.bytes, 0);
+
+/**
+ * Batas waktu pemuatan supaya status tidak pernah menggantung selamanya.
+ * Kalau terlampaui, UI menampilkan status GAGAL + tombol "Coba lagi".
+ */
+export const LOAD_LIMITS = Object.freeze({
+  totalTimeoutMs: 45000, // total seluruh percobaan (semua sumber)
+  stallTimeoutMs: 15000, // dianggap macet kalau tidak ada data masuk selama ini
+  readyTimeoutMs: 60000, // pengaman di thread utama kalau worker diam saja
+});
+
+/** Memformat byte menjadi teks Indonesia: 4200000 -> "4,2 MB". */
+export function formatBytes(bytes) {
+  const value = Math.max(0, Number(bytes) || 0);
+  if (value < 1000) return `${Math.round(value)} B`;
+  if (value < 1000000) return `${(value / 1000).toFixed(1).replace(".", ",")} kB`;
+  return `${(value / 1000000).toFixed(1).replace(".", ",")} MB`;
+}
 
 /** Batas eksekusi supaya kode pemain tidak bisa menggantung selamanya. */
 export const LIMITS = Object.freeze({
@@ -51,6 +102,11 @@ import builtins as _builtins
 import inspect as _inspect
 
 _ARAH_SAH = ("up", "down", "left", "right")
+_MAKS_LANGKAH = 50
+
+
+class ArgumenError(Exception):
+    """Argumen perintah tidak sesuai, mis. move_down(0) atau move_down("dua")."""
 
 
 def _periksa_arah(arah):
@@ -60,24 +116,49 @@ def _periksa_arah(arah):
         )
 
 
-def move_up():
-    """Naik satu tile (arah hadap menjadi 'up')."""
-    __api_move__("up", _inspect.currentframe().f_back.f_lineno)
+def _periksa_langkah(langkah, nama):
+    """Jumlah langkah harus bilangan bulat 1 sampai _MAKS_LANGKAH."""
+    if isinstance(langkah, bool) or not isinstance(langkah, int):
+        raise ArgumenError(
+            "Jumlah langkah pada " + nama + "() harus bilangan bulat, contoh: " + nama + "(2)."
+        )
+    if langkah < 1:
+        raise ArgumenError(
+            "Jumlah langkah pada " + nama + "() minimal 1, contoh: " + nama + "(1)."
+        )
+    if langkah > _MAKS_LANGKAH:
+        raise ArgumenError(
+            "Jumlah langkah pada " + nama + "() maksimal " + str(_MAKS_LANGKAH) + " per perintah."
+        )
+    return langkah
 
 
-def move_down():
-    """Turun satu tile (arah hadap menjadi 'down')."""
-    __api_move__("down", _inspect.currentframe().f_back.f_lineno)
+def _gerak(arah, langkah, nama, baris):
+    """Melangkah "langkah" kali satu tile; berhenti kalau tertabrak."""
+    _periksa_langkah(langkah, nama)
+    for _ in range(langkah):
+        if not __api_move__(arah, baris):
+            break
 
 
-def move_left():
-    """Jalan satu tile ke kiri (arah hadap menjadi 'left')."""
-    __api_move__("left", _inspect.currentframe().f_back.f_lineno)
+def move_up(langkah=1):
+    """Naik "langkah" tile (default 1). Contoh: move_up() atau move_up(2)."""
+    _gerak("up", langkah, "move_up", _inspect.currentframe().f_back.f_lineno)
 
 
-def move_right():
-    """Jalan satu tile ke kanan (arah hadap menjadi 'right')."""
-    __api_move__("right", _inspect.currentframe().f_back.f_lineno)
+def move_down(langkah=1):
+    """Turun "langkah" tile (default 1). Contoh: move_down() atau move_down(2)."""
+    _gerak("down", langkah, "move_down", _inspect.currentframe().f_back.f_lineno)
+
+
+def move_left(langkah=1):
+    """Jalan "langkah" tile ke kiri (default 1)."""
+    _gerak("left", langkah, "move_left", _inspect.currentframe().f_back.f_lineno)
+
+
+def move_right(langkah=1):
+    """Jalan "langkah" tile ke kanan (default 1)."""
+    _gerak("right", langkah, "move_right", _inspect.currentframe().f_back.f_lineno)
 
 
 def attack(arah=None):
@@ -122,8 +203,11 @@ def input(prompt=""):
 
 def bantuan():
     """Menampilkan daftar fungsi yang bisa dipakai."""
-    print("Fungsi yang tersedia: move_up, move_down, move_left, move_right,")
-    print("attack(arah=None), is_blocked(arah), can_attack(arah), at_goal(), print(...)")
+    print("Fungsi yang tersedia:")
+    print("  move_up(), move_down(), move_left(), move_right()  -> jalan 1 tile")
+    print("  move_down(2)  -> jalan 2 tile sekaligus (angka 1 sampai 50)")
+    print("  attack(arah=None)  -> hancurkan batu di depan arah hadap terakhir")
+    print("  is_blocked(arah), can_attack(arah), at_goal(), print(...)")
 `;
 
 /* -----------------------------------------------------------------------------
@@ -196,6 +280,8 @@ const FRIENDLY_BY_TYPE = {
   RecursionError: () =>
     "Fungsi memanggil dirinya sendiri terlalu dalam. Tambahkan syarat berhenti di dalam def.",
   RuntimeError: (info) => info.detail || "Terjadi kesalahan saat kode berjalan.",
+  ArgumenError: (info) =>
+    info.detail || "Argumen perintah belum tepat. Cek angkanya, mis. move_down(2).",
   JsException: (info) =>
     info.detail?.includes("batas aksi")
       ? `Kodemu sudah melakukan lebih dari ${LIMITS.maxActions} aksi. Coba pakai perulangan atau rute yang lebih pendek.`
@@ -293,7 +379,8 @@ export function createGameApi(engine, options = {}) {
       if (!isValidDirection(direction)) throw new Error(`Arah tidak dikenal: ${direction}`);
       const event = engine.move(direction);
       event.line = typeof line === "number" ? line : null;
-      return null;
+      // True kalau berhasil: dipakai prelude untuk berhenti saat tertabrak.
+      return Boolean(event.ok);
     },
     __api_attack__: (direction, line) => {
       guardActionLimit();
@@ -301,7 +388,7 @@ export function createGameApi(engine, options = {}) {
       if (!isValidDirection(arah)) throw new Error(`Arah tidak dikenal: ${arah}`);
       const event = engine.attack(arah);
       event.line = typeof line === "number" ? line : null;
-      return null;
+      return Boolean(event.ok);
     },
     __api_is_blocked__: (direction) => engine.isBlocked(direction),
     __api_can_attack__: (direction) => engine.canAttack(direction),
@@ -373,6 +460,216 @@ export async function runPlayerCode(pyodide, params) {
    BAGIAN 2 — kode yang berjalan DI DALAM Web Worker
    ----------------------------------------------------------------------------- */
 
+/* -----------------------------------------------------------------------------
+   BAGIAN 1B — pemuat Pyodide (dipakai worker; bisa diuji juga dari Node)
+   ----------------------------------------------------------------------------- */
+
+/** Error pemuatan Pyodide yang membawa rincian tiap sumber (untuk panel teknis). */
+export class PyodideLoadError extends Error {
+  /**
+   * @param {string} message pesan ringkas
+   * @param {Array<{id:string,label:string,ok:boolean,ms:number,error?:string}>} attempts
+   */
+  constructor(message, attempts = []) {
+    super(message);
+    this.name = "PyodideLoadError";
+    this.attempts = attempts;
+  }
+
+  /** Ringkasan rincian tiap sumber, satu baris per sumber. */
+  technicalReport() {
+    if (!this.attempts.length) return String(this.message);
+    return this.attempts
+      .map((a) => `- ${a.label}: ${a.ok ? "berhasil" : (a.error ?? "gagal")} (${a.ms} ms)`)
+      .join("\n");
+  }
+}
+
+/**
+ * Mengunduh satu berkas sambil melaporkan jumlah byte yang masuk.
+ * Unduhan ini juga menghangatkan cache browser, sehingga pemanggilan berkas
+ * yang sama oleh Pyodide sesudahnya tidak perlu mengunduh ulang.
+ */
+export async function fetchWithProgress(url, options = {}) {
+  const { signal, onBytes = () => {}, fetchImpl = fetch } = options;
+  const response = await fetchImpl(url, { signal });
+  if (!response.ok) throw new Error(`HTTP ${response.status} saat meminta ${url}`);
+
+  if (!response.body || typeof response.body.getReader !== "function") {
+    const buffer = await response.arrayBuffer();
+    onBytes(buffer.byteLength);
+    return buffer.byteLength;
+  }
+
+  const reader = response.body.getReader();
+  let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const bytes = value?.byteLength ?? 0;
+    received += bytes;
+    onBytes(bytes);
+  }
+  return received;
+}
+
+/** true kalau modul ini berjalan di Node.js (dipakai skrip pengujian di scripts/). */
+const IS_NODE = typeof process !== "undefined" && Boolean(process.versions?.node);
+
+/**
+ * Pyodide di Node.js memakai jalur berkas biasa, bukan URL "file://".
+ * Di browser fungsi ini tidak mengubah apa pun.
+ */
+function toLoadIndexURL(indexURL) {
+  if (!IS_NODE || !indexURL.startsWith("file://")) return indexURL;
+  return decodeURIComponent(new URL(indexURL).pathname);
+}
+
+/** Mengunduh berkas-berkas Pyodide dari satu sumber (untuk progres unduhan). */
+export async function prefetchSource(source, options = {}) {
+  const { onProgress = () => {}, onBytes, signal, fetchImpl = fetch } = options;
+  let receivedTotal = 0;
+  for (const file of PYODIDE_FILES) {
+    await fetchWithProgress(new URL(file.name, source.indexURL).href, {
+      signal,
+      fetchImpl,
+      onBytes: (bytes) => {
+        receivedTotal += bytes;
+        onProgress({ received: receivedTotal, total: PYODIDE_TOTAL_BYTES, file: file.name });
+        onBytes?.(receivedTotal);
+      },
+    });
+  }
+  return receivedTotal;
+}
+
+/**
+ * Memuat instance Pyodide dari satu sumber.
+ *
+ * Ada dua pengaman waktu: (1) "macet" — tidak ada byte masuk selama
+ * LOAD_LIMITS.stallTimeoutMs, lalu koneksi dibatalkan; (2) batas waktu total
+ * (default 45 detik) yang membatalkan seluruh percobaan sumber ini.
+ *
+ * @param {{id:string,label:string,indexURL:string}} source
+ */
+export async function loadPyodideFromSource(source, options = {}) {
+  const {
+    onProgress = () => {},
+    onStage = () => {},
+    importModule = (url) => import(/* @vite-ignore */ url),
+    stallTimeoutMs = LOAD_LIMITS.stallTimeoutMs,
+    timeoutMs = LOAD_LIMITS.totalTimeoutMs,
+    fetchImpl = fetch,
+  } = options;
+
+  const controller = new AbortController();
+  let stallTimer = null;
+  let totalTimer = null;
+
+  const resetStall = () => {
+    if (stallTimer) clearTimeout(stallTimer);
+    stallTimer = setTimeout(() => {
+      controller.abort(new Error(`Tidak ada data masuk selama ${stallTimeoutMs / 1000} detik`));
+    }, stallTimeoutMs);
+  };
+
+  const work = async () => {
+    onStage("download", `Mengunduh Python dari ${source.label}…`);
+    resetStall();
+    await prefetchSource(source, {
+      onProgress,
+      onBytes: resetStall,
+      signal: controller.signal,
+      fetchImpl,
+    });
+    if (stallTimer) clearTimeout(stallTimer);
+
+    onStage("start", "Menyiapkan Python (sekali saja, mohon tunggu)…");
+    const mod = await importModule(`${source.indexURL}pyodide.mjs`);
+    const load = mod.loadPyodide ?? mod.default?.loadPyodide;
+    if (typeof load !== "function") {
+      throw new Error("Berkas pyodide.mjs tidak berisi fungsi loadPyodide");
+    }
+    return load({ indexURL: toLoadIndexURL(source.indexURL) });
+  };
+
+  const timeout = new Promise((_, reject) => {
+    totalTimer = setTimeout(() => {
+      controller.abort(new Error("Batas waktu pemuatan terlampaui"));
+      reject(new Error(`Batas waktu ${Math.round(timeoutMs / 1000)} detik terlampaui`));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([work(), timeout]);
+  } finally {
+    if (stallTimer) clearTimeout(stallTimer);
+    if (totalTimer) clearTimeout(totalTimer);
+  }
+}
+
+/**
+ * Memuat Pyodide dari sumber pertama yang berhasil: salinan lokal dulu,
+ * baru CDN sebagai cadangan.
+ *
+ * @returns {Promise<{pyodide:object, source:object, attempts:Array}>}
+ * @throws {PyodideLoadError} kalau semua sumber gagal
+ */
+export async function loadPyodideWithFallback(options = {}) {
+  const {
+    sources = PYODIDE_SOURCES,
+    skip = [],
+    onProgress = () => {},
+    onStatus = () => {},
+    importModule,
+    fetchImpl = fetch,
+    timeoutMs = LOAD_LIMITS.totalTimeoutMs,
+    stallTimeoutMs = LOAD_LIMITS.stallTimeoutMs,
+    now = () => Date.now(),
+  } = options;
+
+  const deadline = now() + timeoutMs;
+  const attempts = [];
+  const daftarSumber = sources.filter((source) => !skip.includes(source.id));
+
+  for (const source of daftarSumber) {
+    const mulai = now();
+    const sisa = deadline - mulai;
+    if (sisa <= 500) {
+      attempts.push({
+        id: source.id,
+        label: source.label,
+        ok: false,
+        ms: 0,
+        error: "Batas waktu total habis sebelum sumber ini dicoba",
+      });
+      continue;
+    }
+
+    try {
+      const pyodide = await loadPyodideFromSource(source, {
+        onProgress: (info) => onProgress({ ...info, source }),
+        onStage: (stage, message) => onStatus(stage, message, source),
+        importModule,
+        fetchImpl,
+        timeoutMs: sisa,
+        stallTimeoutMs,
+      });
+      attempts.push({ id: source.id, label: source.label, ok: true, ms: now() - mulai });
+      return { pyodide, source, attempts };
+    } catch (error) {
+      const pesan = String(error?.message ?? error);
+      attempts.push({ id: source.id, label: source.label, ok: false, ms: now() - mulai, error: pesan });
+      onStatus("loading", `Gagal dari ${source.label} (${pesan}). Mencoba sumber berikutnya…`, source);
+    }
+  }
+
+  const ringkas = attempts.length
+    ? `Semua sumber Python gagal — ${attempts.map((a) => `${a.label}: ${a.ok ? "berhasil" : a.error}`).join(" | ")}`
+    : "Tidak ada sumber Python yang bisa dicoba";
+  throw new PyodideLoadError(ringkas, attempts);
+}
+
 /** true kalau modul ini sedang dieksekusi sebagai Web Worker (bukan di thread utama). */
 const IS_WORKER =
   typeof document === "undefined" &&
@@ -383,33 +680,67 @@ const IS_WORKER =
 if (IS_WORKER) {
   /** Promise pemuatan Pyodide (lazy: hanya saat permintaan pertama). */
   let pyodidePromise = null;
+  /** Sumber yang sudah terbukti gagal, tidak dicoba lagi saat "Coba lagi". */
+  let failedSourceIds = [];
 
-  function postStatus(stage, message) {
-    self.postMessage({ type: "status", stage, message });
+  function postStatus(stage, message, extra = {}) {
+    self.postMessage({ type: "status", stage, message, ...extra });
   }
 
-  /** Memuat Pyodide dari CDN sekali saja. */
-  function ensurePyodide() {
-    if (!pyodidePromise) {
-      postStatus("loading", "Memuat Python (Pyodide) dari CDN…");
-      pyodidePromise = import(/* @vite-ignore */ PYODIDE_MODULE_URL)
-        .then((mod) => mod.loadPyodide({ indexURL: PYODIDE_INDEX_URL }))
-        .then((pyodide) => {
-          postStatus("ready", "Python siap");
-          return pyodide;
-        })
-        .catch((error) => {
-          pyodidePromise = null;
-          postStatus("error", `Gagal memuat Python: ${error?.message ?? error}`);
-          throw error;
+  /** Memuat Pyodide sekali saja, sambil melaporkan progres ke thread utama. */
+  function ensurePyodide(skip = []) {
+    if (pyodidePromise) return pyodidePromise;
+
+    const lewati = Array.from(new Set([...(skip ?? []), ...failedSourceIds]));
+    postStatus("loading", "Menyiapkan Python…", {
+      progress: { received: 0, total: PYODIDE_TOTAL_BYTES, percent: 0 },
+    });
+
+    pyodidePromise = loadPyodideWithFallback({
+      skip: lewati,
+      onStatus: (stage, message, source) =>
+        postStatus("loading", message, { source: source.id, sourceLabel: source.label }),
+      onProgress: ({ received, total, source }) => {
+        const percent = total ? Math.min(99, Math.round((received / total) * 100)) : 0;
+        postStatus(
+          "loading",
+          `Mengunduh Python… ${formatBytes(received)} dari ${formatBytes(total)} (${percent}%)`,
+          {
+            progress: { received, total, percent },
+            source: source.id,
+            sourceLabel: source.label,
+          },
+        );
+      },
+    })
+      .then(({ pyodide, source, attempts }) => {
+        postStatus("ready", `Python siap (${source.label})`, {
+          source: source.id,
+          sourceLabel: source.label,
+          attempts,
         });
-    }
+        return pyodide;
+      })
+      .catch((error) => {
+        pyodidePromise = null;
+        const attempts = error?.attempts ?? [];
+        failedSourceIds = attempts.filter((a) => !a.ok).map((a) => a.id);
+        postStatus("error", "Python gagal dimuat.", {
+          failedSources: failedSourceIds,
+          technical:
+            error instanceof PyodideLoadError
+              ? error.technicalReport()
+              : String(error?.stack ?? error?.message ?? error),
+        });
+        throw error;
+      });
+
     return pyodidePromise;
   }
 
   /** Menjalankan satu permintaan "run" dari thread utama. */
   async function handleRun(data) {
-    const { id, code, grid, facing } = data;
+    const { id, code, grid, facing, maxActions } = data;
     let hasil;
 
     try {
@@ -417,6 +748,7 @@ if (IS_WORKER) {
       hasil = await runPlayerCode(pyodide, {
         code,
         level: { grid, facing },
+        maxActions,
         onOutput: (text) => self.postMessage({ type: "stdout", text }),
       });
     } catch (fatalError) {
@@ -431,7 +763,7 @@ if (IS_WORKER) {
         coins: 0,
         keys: 0,
         elapsedMs: 0,
-        maxActions: LIMITS.maxActions,
+        maxActions: maxActions ?? LIMITS.maxActions,
       };
     }
 
@@ -443,7 +775,7 @@ if (IS_WORKER) {
     if (!data || typeof data !== "object") return;
 
     if (data.type === "init") {
-      ensurePyodide().catch(() => {
+      ensurePyodide(Array.isArray(data.skip) ? data.skip : []).catch(() => {
         /* kegagalan sudah dilaporkan lewat pesan status */
       });
       return;
@@ -493,7 +825,7 @@ export class TimeoutError extends Error {
  */
 export class PyodideRunner {
   /**
-   * @param {{onStatus?:(status:{stage:string, message:string})=>void, onStdout?:(text:string)=>void, workerUrl?:string|URL}} [options]
+   * @param {{onStatus?:(status:object)=>void, onStdout?:(text:string)=>void, workerUrl?:string|URL, loadTimeoutMs?:number}} [options]
    */
   constructor(options = {}) {
     this.onStatus = options.onStatus ?? (() => {});
@@ -501,10 +833,15 @@ export class PyodideRunner {
     this.workerUrl =
       options.workerUrl ?? new URL(/* @vite-ignore */ "./runner.js", import.meta.url).href;
     this.worker = null;
-    this.state = "idle"; // idle | loading | ready | running
+    this.state = "idle"; // idle | loading | ready | running | error
     this.readyPromise = null;
     this.pending = null; // { id, resolve, reject, timer }
     this.lastId = 0;
+    this.loadTimer = null; // pengaman kalau worker diam saja
+    this.loadTimeoutMs = options.loadTimeoutMs ?? LOAD_LIMITS.readyTimeoutMs; // bisa diperpendek saat pengujian
+    this.failedSources = []; // sumber yang sudah gagal (dilewati saat "Coba lagi")
+    this.progress = null; // progres unduhan terakhir
+    this.activeSource = null; // keterangan sumber yang sedang/berhasil dipakai
   }
 
   /** Membuat worker baru dan mulai memuat Pyodide (lazy). */
@@ -514,27 +851,104 @@ export class PyodideRunner {
     }
 
     // Buang worker lama (mis. setelah gagal memuat) supaya tidak menumpuk.
-    if (this.worker) {
-      this.worker.terminate();
-      this.worker = null;
+    this.disposeWorker();
+
+    try {
+      this.worker = new Worker(this.workerUrl, { type: "module" });
+    } catch (error) {
+      const pesan = `Worker tidak bisa dibuat: ${error?.message ?? error}`;
+      this.state = "error";
+      this.onStatus({ stage: "error", message: pesan, technical: String(error?.stack ?? error) });
+      this.readyPromise = Promise.reject(new Error(pesan));
+      return this.readyPromise;
     }
 
-    this.worker = new Worker(this.workerUrl, { type: "module" });
     this.worker.addEventListener("message", (event) => this.handleMessage(event.data));
     this.worker.addEventListener("error", (event) => {
       const message = event?.message ?? "Worker Pyodide gagal dimuat";
-      this.onStatus({ stage: "error", message });
-      this.rejectPending(new Error(message));
+      this.failLoad(
+        message,
+        `Error di worker: ${message}\nBerkas: ${event?.filename ?? "?"} baris ${event?.lineno ?? "?"}`,
+      );
+    });
+    this.worker.addEventListener("messageerror", () => {
+      this.failLoad(
+        "Pesan dari worker tidak bisa dibaca.",
+        "Terjadi messageerror: data yang dikirim worker bukan struktur yang dikenali.",
+      );
     });
 
     this.readyPromise = new Promise((resolve, reject) => {
       this.readyResolve = resolve;
       this.readyReject = reject;
     });
+    // Kegagalan selalu dilaporkan lewat onStatus(); catch kosong ini mencegah
+    // "unhandled rejection" kalau pemanggil tidak memasang .catch().
+    this.readyPromise.catch(() => {});
     this.state = "loading";
-    this.onStatus({ stage: "loading", message: "Memuat Python…" });
-    this.worker.postMessage({ type: "init" });
+    this.progress = { received: 0, total: PYODIDE_TOTAL_BYTES, percent: 0 };
+    this.onStatus({
+      stage: "loading",
+      message: "Menyiapkan Python…",
+      progress: this.progress,
+      sourceLabel: null,
+    });
+
+    // Pengaman terakhir: kalau worker tidak pernah menjawab, jangan menggantung.
+    this.loadTimer = setTimeout(() => {
+      this.failLoad(
+        `Worker tidak merespons setelah ${Math.round(this.loadTimeoutMs / 1000)} detik.`,
+        "Worker Pyodide tidak mengirim pesan apa pun (skrip worker mungkin gagal dimuat).",
+      );
+    }, this.loadTimeoutMs);
+
+    this.worker.postMessage({ type: "init", skip: this.failedSources });
     return this.readyPromise;
+  }
+
+  /** Menandai pemuatan gagal: bersihkan worker, kabari UI, tolak promise. */
+  failLoad(message, technical = "") {
+    if (this.state === "ready" || this.state === "running") return;
+    this.clearLoadTimer();
+    this.state = "error";
+    this.onStatus({ stage: "error", message, technical });
+    this.rejectPending(new Error(message));
+    this.disposeWorker();
+    this.readyReject?.(new Error(message));
+    this.readyResolve = null;
+    this.readyReject = null;
+  }
+
+  /** Membuang worker tanpa mengubah status (dipakai saat gagal/retry). */
+  disposeWorker() {
+    this.clearLoadTimer();
+    if (this.worker) {
+      this.worker.terminate();
+      this.worker = null;
+    }
+  }
+
+  clearLoadTimer() {
+    if (this.loadTimer) {
+      clearTimeout(this.loadTimer);
+      this.loadTimer = null;
+    }
+  }
+
+  /**
+   * Memulai ulang dari nol: buang worker lama, lalu muat Pyodide lagi.
+   * Sumber yang sudah terbukti gagal dilewati supaya percobaan berikutnya
+   * langsung memakai sumber lain (kalau semua gagal, daftarnya direset).
+   */
+  retry() {
+    const semuaGagal = this.failedSources.length >= PYODIDE_SOURCES.length;
+    this.disposeWorker();
+    this.state = "idle";
+    this.readyPromise = null;
+    this.readyResolve = null;
+    this.readyReject = null;
+    if (semuaGagal) this.failedSources = [];
+    return this.ensureReady();
   }
 
   /** Menangani pesan dari worker. */
@@ -543,13 +957,31 @@ export class PyodideRunner {
 
     if (data.type === "status") {
       if (data.stage === "ready") {
+        this.clearLoadTimer();
         this.state = "ready";
+        this.activeSource = data.sourceLabel ?? null;
+        this.progress = { received: PYODIDE_TOTAL_BYTES, total: PYODIDE_TOTAL_BYTES, percent: 100 };
         this.readyResolve?.();
+        this.readyResolve = null;
+        this.readyReject = null;
       } else if (data.stage === "error") {
-        this.state = "idle";
+        this.clearLoadTimer();
+        this.state = "error";
+        if (Array.isArray(data.failedSources)) this.failedSources = data.failedSources;
+        this.disposeWorker();
         this.readyReject?.(new Error(data.message));
+        this.readyResolve = null;
+        this.readyReject = null;
+      } else if (data.progress) {
+        this.progress = data.progress;
       }
-      this.onStatus({ stage: data.stage, message: data.message });
+      this.onStatus({
+        stage: data.stage,
+        message: data.message,
+        progress: data.progress ?? this.progress,
+        sourceLabel: data.sourceLabel ?? this.activeSource,
+        technical: data.technical ?? "",
+      });
       return;
     }
 
@@ -610,14 +1042,12 @@ export class PyodideRunner {
 
   /** Menghentikan worker (dipakai tombol Stop dan saat batas waktu terlampaui). */
   stop() {
-    if (this.worker) {
-      this.worker.terminate();
-      this.worker = null;
-    }
+    this.disposeWorker();
     this.state = "idle";
     this.readyPromise = null;
     this.readyResolve = null;
     this.readyReject = null;
+    this.progress = null;
     this.rejectPending(new Error("Dihentikan oleh pengguna"));
   }
 

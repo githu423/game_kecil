@@ -6,6 +6,8 @@
     <title>Pengujian Water Sort — Portal Game Kecil</title>
     <meta name="description" content="Menjalankan pengujian logika Water Sort langsung di browser." />
     <link rel="stylesheet" href="../../css/base.css" />
+    <!-- style.css dimuat supaya pengujian tampilan botol mengukur tata letak asli. -->
+    <link rel="stylesheet" href="./style.css" />
     <style>
       .uji-wrap {
         max-width: 900px;
@@ -55,6 +57,11 @@
         color: var(--danger);
       }
 
+      .uji-item.is-skip {
+        border-left-color: var(--border-strong);
+        color: var(--text-muted);
+      }
+
       .uji-msg {
         display: block;
         color: var(--danger);
@@ -90,8 +97,10 @@
       <p><a class="btn btn-ghost" href="./index.html">← Kembali ke Water Sort</a></p>
       <h1>Pengujian Water Sort</h1>
       <p>
-        Halaman ini menjalankan pengujian aturan penuangan, solver, dan generator level
-        (berkas <code>tests.js</code>). Versi Node-nya: <code>node games/water-sort/tests.js</code>.
+        Halaman ini menjalankan pengujian aturan penuangan, solver, generator level, dan
+        <strong>tampilan botol</strong> (jumlah slot, tinggi slot yang sama, serta penentuan
+        tujuan yang sah). Berkasnya <code>tests.js</code>; versi Node-nya:
+        <code>node games/water-sort/tests.js</code> (tanpa pengujian tampilan).
       </p>
       <p class="uji-summary" id="ujiSummary">Menjalankan pengujian…</p>
       <ul class="uji-list" id="ujiList"></ul>
@@ -109,7 +118,8 @@
       const listEl = document.getElementById("ujiList");
 
       function render(summary, seconds) {
-        summaryEl.textContent = `${summary.passed}/${summary.total} pengujian lulus (${seconds}s)${
+        const dilewati = summary.skipped ? ` — ${summary.skipped} dilewati` : "";
+        summaryEl.textContent = `${summary.passed}/${summary.total} pengujian lulus (${seconds}s)${dilewati}${
           summary.failed ? ` — ${summary.failed} gagal` : " — semua sehat ✅"
         }`;
         summaryEl.classList.add(summary.failed ? "is-fail" : "is-ok");
@@ -117,11 +127,12 @@
         const fragment = document.createDocumentFragment();
         for (const item of summary.results) {
           const li = document.createElement("li");
-          li.className = `uji-item ${item.ok ? "is-ok" : "is-fail"}`;
+          const keadaan = item.skipped ? "is-skip" : item.ok ? "is-ok" : "is-fail";
+          li.className = `uji-item ${keadaan}`;
 
           const mark = document.createElement("span");
           mark.className = "uji-mark";
-          mark.textContent = item.ok ? "ok" : "gagal";
+          mark.textContent = item.skipped ? "lewat" : item.ok ? "ok" : "gagal";
 
           const text = document.createElement("span");
           text.textContent = item.name;
@@ -140,7 +151,7 @@
 
       try {
         const startedAt = performance.now();
-        const summary = runTests();
+        const summary = await runTests();
         render(summary, ((performance.now() - startedAt) / 1000).toFixed(1));
       } catch (error) {
         summaryEl.textContent = `Gagal menjalankan pengujian: ${error?.message ?? error}`;

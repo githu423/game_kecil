@@ -140,6 +140,35 @@ export function pour(state, from, to) {
   };
 }
 
+/**
+ * Daftar botol yang sah menjadi TUJUAN penuangan dari botol `from`.
+ * Dipakai UI untuk menyoroti tujuan yang boleh (dan meredupkan yang tidak),
+ * supaya aturan penuangan tidak ditulis dua kali di main.js.
+ * @returns {number[]} indeks botol tujuan yang sah
+ */
+export function validTargets(state, from) {
+  const targets = [];
+  if (!state?.bottles?.length) return targets;
+  for (let to = 0; to < state.bottles.length; to += 1) {
+    if (to === from) continue;
+    if (canPour(state, from, to).ok) targets.push(to);
+  }
+  return targets;
+}
+
+/**
+ * Keadaan visual satu botol, dipakai UI untuk memilih kelas CSS.
+ * @param {string[]} bottle isi botol
+ * @returns {"empty"|"done"|"full"|"partial"} keadaan botol
+ */
+export function bottleState(bottle) {
+  if (!bottle || bottle.length === 0) return "empty";
+  // Botol selesai: penuh dan hanya satu warna.
+  if (bottle.length === CAPACITY && bottle.every((color) => color === bottle[0])) return "done";
+  if (bottle.length === CAPACITY) return "full";
+  return "partial";
+}
+
 /** Semua langkah yang sah dari sebuah state: [{from, to, amount, color}]. */
 export function findMoves(state) {
   const moves = [];

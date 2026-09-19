@@ -12,6 +12,7 @@
 
 import {
   CAPACITY,
+  bottleState,
   canPour,
   cloneState,
   colorInfo,
@@ -19,6 +20,7 @@ import {
   findHint,
   isWon,
   pour,
+  validTargets,
 } from "./logic.js";
 import {
   LEVEL_COUNT,
@@ -62,7 +64,7 @@ function writeStored(key, value) {
    ----------------------------------------------------------------------------- */
 
 /** Durasi animasi (ms). Dipendekkan kalau pemain memilih gerakan minimal. */
-const TIME = { tilt: 240, pourTime: 220, settle: 160 };
+const TIME = { tilt: 260, pourTime: 420, settle: 180 };
 
 const state = {
   entry: null, // { config, state, solution } dari levels.js
@@ -102,12 +104,108 @@ function el(tag, attrs = {}, children = []) {
 
 /**
  * Nama botol untuk pembaca layar.
- * Contoh: "Botol 2: 3 dari 4 lapis, dari bawah ke atas merah, biru, biru".
+ * Contoh: "Botol 2: 3 dari 4 lapis terisi, sisa 1 slot. Dari bawah ke atas: merah, biru.
+ *          Bisa dituang ke sini."
  */
-function bottleLabel(index, bottle) {
-  if (!bottle.length) return `Botol ${index + 1}: kosong`;
+function bottleLabel(index, bottle, visual = {}) {
+  const kepala = `Botol ${index + 1}`;
+  const tujuan = visual.isTarget ? " Bisa dituang ke sini." : "";
+  if (!bottle.length) return `${kepala}: kosong (${CAPACITY} slot kosong).${tujuan}`;
   const isi = bottle.map((color) => colorInfo(color).label).join(", ");
-  return `Botol ${index + 1}: ${bottle.length} dari ${CAPACITY} lapis, dari bawah ke atas ${isi}`;
+  const sisa = CAPACITY - bottle.length;
+  const status = visual.state === "done" ? " Sudah selesai." : sisa === 0 ? " Penuh." : "";
+  return `${kepala}: ${bottle.length} dari ${CAPACITY} lapis terisi, sisa ${sisa} slot. Dari bawah ke atas: ${isi}.${status}${tujuan}`;
+}
+
+/**
+ * Keadaan visual satu botol (kelas CSS + keterangan status).
+ * Aturan penuangan diambil dari logic.js (`validTargets`), tidak ditulis ulang di sini.
+ *
+ * @param {number} index indeks botol
+ * @param {string[][]} bottles seluruh botol (untuk menghitung tujuan yang sah)
+ * @param {{selection?:number|null, targets?:number[]}} [options]
+ */
+export function bottleVisualState(index, bottles, options = {}) {
+  const selection = options.selection ?? null;
+  const targets = options.targets ?? (selection === null ? [] : validTargets({ bottles }, selection));
+  const bottle = bottles[index] ?? [];
+  const state = bottleState(bottle);
+  const kelas = [];
+
+  if (state === "empty") kelas.push("is-empty");
+  if (state === "done") kelas.push("is-done");
+
+  const sebagaiSumber = selection === index;
+  if (sebagaiSumber) kelas.push("is-selected");
+
+  // Botol selesai tidak pernah ditawarkan sebagai tujuan.
+  const isTarget = !sebagaiSumber && state !== "done" && targets.includes(index);
+  if (selection !== null && !sebagaiSumber) kelas.push(isTarget ? "is-valid-target" : "is-dimmed");
+
+  return { state, classes: kelas, isTarget, isSelected: sebagaiSumber };
+}
+
+/**
+ * Membuat elemen botol: kaca berisi tepat CAPACITY slot setinggi sama,
+ * dirapatkan dari dasar botol, plus indikator ruang tersisa "n/4".
+ *
+ * @param {number} index indeks botol
+ * @param {string[]} bottle isi botol dari bawah ke atas
+ * @param {{bottles?:string[][], selection?:number|null, targets?:number[], incomingSlot?:number}} [options]
+ * @returns {HTMLButtonElement}
+ */
+export function createBottleElement(index, bottle, options = {}) {
+  const bottles = options.bottles ?? [bottle];
+  const selection = options.selection ?? null;
+  const visual = bottleVisualState(index, bottles, options);
+
+  const button = el("button", {
+    type: "button",
+    class: ["ws-bottle", ...visual.classes].join(" "),
+    "data-index": String(index),
+    "data-state": visual.state,
+    "data-filled": String(bottle.length),
+    "aria-pressed": selection === index ? "true" : "false",
+    "aria-label": bottleLabel(index, bottle, visual),
+  });
+
+  const glass = el("span", { class: "ws-bottle__glass" });
+  glass.style.setProperty("--ws-capacity", String(CAPACITY));
+
+  // Baris 1 = paling atas. Cairan mengisi dari baris terbawah ke atas.
+  for (let row = 1; row <= CAPACITY; row += 1) {
+    const layer = CAPACITY - row; // 0 = lapisan dasar botol
+    if (layer < bottle.length) {
+      const info = colorInfo(bottle[layer]);
+      const slot = el("span", {
+        class: "ws-slot",
+        "data-color": info.id,
+        "data-pattern": info.pattern,
+        "data-layer": String(layer),
+      });
+      slot.style.gridRow = String(row);
+      slot.style.setProperty("--slot", info.hex);
+      slot.style.background = info.hex;
+      slot.append(
+        el("span", { class: "ws-slot__symbol", text: info.symbol, "aria-hidden": "true" }),
+      );
+      if (options.incomingSlot === layer) slot.classList.add("is-pouring-in");
+      glass.append(slot);
+    } else {
+      const gap = el("span", { class: "ws-gap", "data-empty-slot": String(layer) });
+      gap.style.gridRow = String(row);
+      glass.append(gap);
+    }
+  }
+
+  const meter = el("span", {
+    class: "ws-bottle__meter",
+    text: `${bottle.length}/${CAPACITY}`,
+  });
+  meter.title = `Terisi ${bottle.length} dari ${CAPACITY} slot`;
+
+  button.append(glass, meter);
+  return button;
 }
 
 function setMessage(text, kind = "") {
@@ -137,36 +235,21 @@ function clearHint() {
  */
 function renderBoard(options = {}) {
   if (!dom.board) return;
+  const bottles = state.current.bottles;
   const incoming = options.pouredIn ?? null;
+  // Tujuan yang sah dihitung sekali di sini (aturan dari logic.js).
+  const targets = state.selection === null ? [] : validTargets(state.current, state.selection);
+
   const fragment = document.createDocumentFragment();
   bottleEls = [];
 
-  state.current.bottles.forEach((bottle, index) => {
-    const button = el("button", {
-      type: "button",
-      class: "ws-bottle",
-      "data-index": String(index),
-      "aria-pressed": state.selection === index ? "true" : "false",
-      "aria-label": bottleLabel(index, bottle),
+  bottles.forEach((bottle, index) => {
+    const button = createBottleElement(index, bottle, {
+      bottles,
+      selection: state.selection,
+      targets,
+      incomingSlot: incoming && incoming.index === index ? bottle.length - 1 : -1,
     });
-    if (state.selection === index) button.classList.add("is-selected");
-
-    for (let layer = 0; layer < bottle.length; layer += 1) {
-      const info = colorInfo(bottle[layer]);
-      const slot = el("div", {
-        class: "ws-slot",
-        "data-pattern": info.pattern,
-        "data-color": info.id,
-      });
-      slot.style.setProperty("--slot", info.hex);
-      slot.style.background = info.hex;
-      slot.append(el("span", { class: "ws-slot__symbol", text: info.symbol, "aria-hidden": "true" }));
-
-      const isLast = layer === bottle.length - 1;
-      if (isLast && incoming && incoming.index === index) slot.classList.add("is-pouring-in");
-      button.append(slot);
-    }
-
     fragment.append(button);
     bottleEls.push(button);
   });
@@ -366,9 +449,12 @@ async function animatePour(from, to, amount, color) {
   tiltBottle(from, fromRect, toRect);
   await wait(TIME.tilt);
 
-  // Lapisan yang keluar dari botol sumber mulai memudar.
+  // Lapisan paling atas keluar lebih dulu, satu per satu (permukaan turun per slot).
   const slots = Array.from(source.querySelectorAll(".ws-slot"));
-  for (const slot of slots.slice(-amount)) slot.classList.add("is-pouring-out");
+  slots.slice(0, amount).forEach((slot, urutan) => {
+    slot.style.animationDelay = `${urutan * 70}ms`;
+    slot.classList.add("is-pouring-out");
+  });
 
   positionStream(fromRect, toRect, colorInfo(color).hex);
   await wait(TIME.pourTime);
@@ -401,15 +487,28 @@ async function onBottleClick(index) {
   clearHint();
 
   if (state.selection === null) {
+    const bottle = state.current.bottles[index];
     // Botol kosong tidak ada gunanya dipilih sebagai sumber.
-    if (state.current.bottles[index].length === 0) {
+    if (bottle.length === 0) {
       shakeBottles(index);
       setMessage("Botol itu kosong, tidak ada yang bisa dituang.", "error");
       return;
     }
+    // Botol yang sudah selesai (penuh, satu warna) tidak bisa dipilih lagi.
+    if (bottleState(bottle) === "done") {
+      shakeBottles(index);
+      setMessage(`Botol ${index + 1} sudah selesai (penuh satu warna) — tidak perlu diubah.`, "hint");
+      return;
+    }
     state.selection = index;
+    const targets = validTargets(state.current, index);
     renderBoard();
-    setMessage(`Botol ${index + 1} dipilih. Sekarang pilih botol tujuan.`);
+    setMessage(
+      targets.length
+        ? `Botol ${index + 1} dipilih. Tujuan yang sah disorot hijau; sisanya diredupkan.`
+        : `Botol ${index + 1} dipilih, tapi belum ada tujuan yang sah. Coba botol lain.`,
+      targets.length ? "" : "hint",
+    );
     return;
   }
 
@@ -667,7 +766,10 @@ export function initWaterSort() {
   startEntry(createLevelState(state.progress.highest));
 }
 
-if (document.readyState === "loading") {
+// Halaman tanpa papan Water Sort (mis. berkas uji di Node) tidak diinisialisasi.
+if (typeof document === "undefined") {
+  /* di Node.js: tidak ada DOM yang perlu disiapkan */
+} else if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", initWaterSort, { once: true });
 } else {
   initWaterSort();
@@ -675,3 +777,6 @@ if (document.readyState === "loading") {
 
 /* Ekspor untuk pengujian manual di konsol browser. */
 export { state, undo, restart, showHint, addBottle, loadLevel, loadRandom, onBottleClick };
+export { renderBoard };
+// Dipakai berkas pengujian (tests.js) untuk memeriksa tampilan botol.
+// createBottleElement & bottleVisualState sudah diekspor di atas definisinya.

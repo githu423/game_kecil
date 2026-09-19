@@ -379,7 +379,14 @@ function updateStepStatus() {
 
 function updateControls() {
   const ready = state.pyStage === "ready";
-  if (dom.run) dom.run.disabled = state.running;
+  if (dom.run) {
+    // Run baru aktif setelah Python benar-benar siap.
+    dom.run.disabled = state.running || !ready;
+    dom.run.title = ready
+      ? "Jalankan kodemu (Ctrl+Enter)"
+      : "Python belum siap — tunggu status “Python siap” di kanan atas.";
+  }
+  if (dom.runHint) dom.runHint.textContent = ready ? "Ctrl+Enter" : "Python belum siap";
   if (dom.stop) dom.stop.disabled = !state.running && !state.replay.playing;
   if (dom.pause) {
     dom.pause.disabled = !state.replay.playing;
@@ -398,39 +405,72 @@ function updateControls() {
     dom.challenge.textContent = bagian.length ? `Tantangan efisiensi: ${bagian.join(" • ")}` : "";
     dom.challenge.hidden = bagian.length === 0;
   }
-  if (dom.runHint) dom.runHint.textContent = ready ? "Ctrl+Enter" : "memuat Python…";
 }
 
 /* -----------------------------------------------------------------------------
    Runner Pyodide
    ----------------------------------------------------------------------------- */
 
+/** Menampilkan/menyembunyikan bilah progres unduhan Python. */
+function setPyProgress(progress) {
+  if (!dom.pyProgress) return;
+  if (!progress) {
+    dom.pyProgress.hidden = true;
+    dom.pyProgress.value = 0;
+    return;
+  }
+  const persen = Math.max(0, Math.min(100, Math.round(progress.percent ?? 0)));
+  dom.pyProgress.hidden = false;
+  dom.pyProgress.value = persen;
+  dom.pyProgress.textContent = `${persen}%`;
+}
+
+/**
+ * Menangani kabar status dari worker Pyodide.
+ * Tiga keadaan: memuat (dengan progres) → siap → gagal (dengan tombol Coba lagi).
+ */
+function handlePyStatus({ stage, message, progress, sourceLabel, technical }) {
+  if (stage === "ready") {
+    state.pyStage = "ready";
+    setPyProgress(null);
+    setStatus(`Python siap 🐍 (${sourceLabel ?? "sumber tidak diketahui"})`);
+    // Hapus hanya banner error lama supaya pesan kemenangan tidak ikut hilang.
+    if (dom.banner?.classList.contains("is-error")) setBanner("");
+  } else if (stage === "error") {
+    state.pyStage = "error";
+    setPyProgress(null);
+    setStatus("Python gagal dimuat");
+    const pesanRamah =
+      "Python (Pyodide) tidak bisa dimuat. Penyebab yang mungkin: tidak ada koneksi internet, " +
+      "jaringan lambat, atau berkas CDN diblokir (pemblokir iklan/firewall). Klik “Coba lagi”.";
+    setBanner("Python gagal dimuat. Klik “Coba lagi” di atas editor.", "error");
+    showError(pesanRamah, technical || message);
+    // Bantu diagnosis dari konsol browser.
+    console.error("[Python Adventure] Gagal memuat Pyodide:", technical || message);
+  } else {
+    state.pyStage = "loading";
+    setPyProgress(progress ?? null);
+    setStatus(message ? `🐍 ${message}` : "Menyiapkan Python…");
+  }
+  updateControls();
+}
+
 /** Menyiapkan PyodideRunner (sekali) dan mulai memuat Pyodide. */
 function ensureRunner() {
-  if (state.runner) return state.runner;
+  if (state.runner) {
+    // Worker bisa saja sudah dibuang (setelah Stop / batas waktu): muat ulang.
+    if (state.pyStage !== "ready" && state.pyStage !== "loading") {
+      state.pyStage = "loading";
+      updateControls();
+      state.runner.ensureReady().catch(() => {
+        /* kegagalan sudah ditampilkan lewat onStatus */
+      });
+    }
+    return state.runner;
+  }
 
   state.runner = new PyodideRunner({
-    onStatus: ({ stage, message }) => {
-      if (stage === "loading") {
-        state.pyStage = "loading";
-        setStatus("Memuat Python… (sekali saja, dari CDN)");
-      } else if (stage === "ready") {
-        state.pyStage = "ready";
-        setStatus("Python siap 🐍");
-      } else if (stage === "error") {
-        state.pyStage = "error";
-        setStatus("Python gagal dimuat");
-        setBanner(
-          "Gagal memuat Python dari CDN. Periksa koneksi internet lalu klik “Muat ulang Python”.",
-          "error",
-        );
-        showError(
-          "Python (Pyodide) tidak bisa dimuat. Pastikan perangkat online, lalu coba lagi.",
-          String(message),
-        );
-      }
-      updateControls();
-    },
+    onStatus: handlePyStatus,
     onStdout: (text) => appendOutput(text),
   });
 
@@ -440,12 +480,45 @@ function ensureRunner() {
   return state.runner;
 }
 
+/** Tombol "Coba lagi": buang worker lama, lalu muat Python dari awal. */
+function onRetryPython() {
+  hideError();
+  setBanner("");
+  state.pyStage = "loading";
+  setStatus("Memuat ulang Python…");
+  updateControls();
+  const runner = state.runner ?? ensureRunner();
+  runner.retry().catch(() => {
+    /* kegagalan sudah ditampilkan lewat onStatus */
+  });
+}
+
+/** Memuat ulang Python di latar belakang (setelah Stop atau batas waktu). */
+function reloadPythonInBackground() {
+  if (!state.runner) return;
+  state.pyStage = "loading";
+  setStatus("Menyiapkan Python lagi…");
+  updateControls();
+  state.runner.ensureReady().catch(() => {
+    /* kegagalan sudah ditampilkan lewat onStatus */
+  });
+}
+
 /* -----------------------------------------------------------------------------
    Menjalankan kode
    ----------------------------------------------------------------------------- */
 
 async function onRun() {
   if (state.running) return;
+  if (state.pyStage !== "ready") {
+    setBanner(
+      state.pyStage === "error"
+        ? "Python belum bisa dipakai. Klik “Coba lagi” di atas editor."
+        : "Python belum siap, tunggu sebentar lalu tekan Run lagi.",
+      "warn",
+    );
+    return;
+  }
   const code = dom.code?.value ?? "";
   if (!code.trim()) {
     setBanner("Tulis kode Python dulu, lalu tekan Run.", "warn");
@@ -530,9 +603,8 @@ function handleRunFailure(error) {
       "(Python perlu dimuat ulang, tunggu sebentar saat menjalankan lagi.)";
     showError(pesan, "Batas waktu 5 detik terlampaui; worker dihentikan paksa.");
     setBanner("Kodemu berjalan terlalu lama, cek apakah ada loop tak terbatas.", "error");
-    setStatus("Worker dihentikan. Python akan dimuat ulang saat Run berikutnya.");
-    state.pyStage = "idle";
-    updateControls();
+    // Worker sudah dibuang saat timeout: siapkan Python lagi di latar belakang.
+    reloadPythonInBackground();
     return;
   }
   const pesan = String(error?.message ?? error);
@@ -733,6 +805,8 @@ function onShowHelp() {
     [
       "Fungsi yang bisa dipakai:",
       "  move_up()  move_down()  move_left()  move_right()   -> jalan satu tile",
+      "  move_down(2)   move_right(3)   ...                   -> jalan beberapa tile sekaligus",
+      "     (angka 1 sampai 50; berhenti sendiri kalau tertabrak; tiap tile = 1 aksi)",
       "  attack(arah=None)                                    -> serang tile di arah hadap terakhir",
       "  is_blocked(arah)   can_attack(arah)   at_goal()      -> sensor (tidak dihitung langkah)",
       "  print(nilai, ...)                                    -> tampil di panel Output",
@@ -789,9 +863,8 @@ function onStop() {
   if (state.runner) state.runner.stop();
   state.running = false;
   stopReplay();
-  setStatus("Kode dihentikan.");
-  setBanner("Kode dihentikan. Tekan Run untuk mencoba lagi.", "warn");
-  updateControls();
+  setBanner("Kode dihentikan. Python disiapkan lagi, sebentar…", "warn");
+  reloadPythonInBackground();
 }
 
 /** Menghentikan animasi yang sedang berjalan. */
@@ -882,6 +955,7 @@ function cacheDom() {
   dom.challenge = document.getElementById("paChallenge");
   dom.runHint = document.getElementById("paRunHint");
   dom.pyDot = document.getElementById("paPyDot");
+  dom.pyProgress = document.getElementById("paPyProgress");
   dom.retryPy = document.getElementById("paRetryPy");
   dom.nextLevel = document.getElementById("paNextLevel");
   dom.restoreStarter = document.getElementById("paRestoreStarter");
@@ -898,14 +972,7 @@ function bindEvents() {
   dom.restoreStarter?.addEventListener("click", onRestoreStarter);
   dom.nextLevel?.addEventListener("click", () => loadLevel(state.level.id + 1));
   dom.help?.addEventListener("click", onShowHelp);
-  dom.retryPy?.addEventListener("click", () => {
-    state.runner?.stop();
-    state.pyStage = "idle";
-    setBanner("");
-    hideError();
-    ensureRunner();
-    updateControls();
-  });
+  dom.retryPy?.addEventListener("click", onRetryPython);
 
   dom.code?.addEventListener("input", () => {
     updateGutter();

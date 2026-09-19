@@ -93,6 +93,55 @@
   color: var(--text-muted);
 }
 
+/* Legenda singkat di bawah papan: arti angka n/4 dan tanda pada botol. */
+.ws-legend {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.9rem;
+  padding: 0;
+  margin: 0.55rem 0 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.ws-legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.ws-legend__mark {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.5rem;
+  height: 1.1rem;
+  padding: 0 0.25rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+}
+
+.ws-legend__mark--empty {
+  border-style: dashed;
+  background: transparent;
+}
+
+.ws-legend__mark--done {
+  border-color: var(--ok);
+  background: var(--ok-soft);
+  color: var(--ok);
+  font-weight: 800;
+}
+
+.ws-legend__mark--target {
+  border-color: var(--accent);
+  border-style: dashed;
+  background: var(--accent-soft);
+}
+
 /* ---------------------------------------------------------------
    Papan & botol
    --------------------------------------------------------------- */
@@ -119,11 +168,11 @@
   --slot: var(--surface-3);
   position: relative;
   width: var(--ws-bottle-width);
-  height: calc(var(--ws-slot-height) * 4 + 18px);
-  padding: 8px 6px 10px;
-  display: flex;
-  flex-direction: column-reverse;
-  gap: 2px;
+  /* Tinggi tidak dipaksa: kaca = 4 slot tetap, ditambah baris keterangan "n/4". */
+  padding: 7px 6px 5px;
+  display: grid;
+  grid-template-rows: auto auto;
+  gap: 4px;
   align-items: stretch;
   background: linear-gradient(
     180deg,
@@ -134,8 +183,48 @@
   border-radius: 10px 10px 18px 18px;
   box-shadow: inset 0 0 0 1px var(--ws-glass), var(--shadow-1);
   cursor: pointer;
-  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
   touch-action: manipulation;
+}
+
+/* Kaca botol: tepat CAPACITY slot setinggi SAMA, terisi dari dasar ke atas.
+   Tidak ada flex-grow: satu slot = satu tinggi tetap, sisa ruang tetap kosong. */
+.ws-bottle__glass {
+  position: relative;
+  display: grid;
+  grid-template-rows: repeat(var(--ws-capacity, 4), var(--ws-slot-height));
+  overflow: hidden;
+  border-radius: 6px 6px 12px 12px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-3) 45%, transparent),
+    color-mix(in srgb, var(--surface-3) 90%, transparent)
+  );
+}
+
+/* Garis tick tipis di setiap batas slot, supaya jumlah slot gampang dihitung. */
+.ws-bottle__glass::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--ws-slot-height) - 1px),
+    color-mix(in srgb, var(--border-strong) 60%, transparent) calc(var(--ws-slot-height) - 1px),
+    color-mix(in srgb, var(--border-strong) 60%, transparent) var(--ws-slot-height)
+  );
+}
+
+/* Keterangan ruang tersisa di bawah botol, mis. "2/4". */
+.ws-bottle__meter {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  line-height: 1.2;
+  text-align: center;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
 }
 
 .ws-bottle:disabled {
@@ -160,8 +249,70 @@
 
 .ws-bottle.is-selected {
   border-color: var(--accent);
-  transform: translateY(-12px);
-  box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow-2);
+  transform: translateY(-14px);
+  box-shadow: 0 0 0 4px var(--accent-soft), var(--shadow-2);
+}
+
+/* Botol kosong: garis tepi putus-putus (tidak hanya mengandalkan warna). */
+.ws-bottle.is-empty {
+  border-style: dashed;
+}
+
+/* Botol selesai (penuh satu warna): centang + glow hijau, tidak bisa dipilih. */
+.ws-bottle.is-done {
+  border-color: var(--ok);
+  box-shadow: 0 0 0 3px var(--ok-soft), 0 0 14px var(--ok-soft);
+  cursor: default;
+}
+
+.ws-bottle.is-done::after {
+  content: "✓";
+  position: absolute;
+  top: -0.5rem;
+  right: -0.4rem;
+  width: 1.1rem;
+  height: 1.1rem;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--ok);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 800;
+  box-shadow: var(--shadow-1);
+}
+
+/* Tujuan yang sah setelah botol sumber dipilih (dipakai logic.js: validTargets). */
+.ws-bottle.is-valid-target {
+  border-color: var(--accent);
+  border-style: dashed;
+  transform: translateY(-6px);
+  animation: ws-target-glow 1.6s ease-in-out infinite;
+}
+
+.ws-bottle.is-valid-target .ws-bottle__meter {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* Botol yang tidak boleh dituang sekarang: diredupkan. */
+.ws-bottle.is-dimmed {
+  opacity: 0.4;
+  filter: saturate(0.5);
+}
+
+.ws-bottle.is-done.is-dimmed {
+  opacity: 0.6;
+}
+
+@keyframes ws-target-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  50% {
+    box-shadow: 0 0 0 7px var(--accent-soft);
+  }
 }
 
 .ws-bottle.is-lifted {
@@ -202,15 +353,25 @@
   }
 }
 
-/* Satu lapis cairan (lapisan paling bawah ada di bawah karena column-reverse). */
+/* Satu slot cairan: tinggi tetap (satu baris grid), selalu tumbuh dari dasar. */
 .ws-slot {
-  flex: 1 1 0;
-  min-height: 0;
-  border-radius: 3px;
-  background: var(--slot);
   position: relative;
   overflow: hidden;
+  border-radius: 2px;
+  background: var(--slot);
+  transform-origin: bottom center;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), inset 0 -1px 0 rgba(0, 0, 0, 0.18);
+}
+
+/* Slot yang masih kosong: tingginya sama, hanya tanpa warna. */
+.ws-gap {
+  border-radius: 2px;
+}
+
+/* Mode aksesibel: batas slot tetap terlihat walau botol masih kosong. */
+.ws.is-accessible .ws-gap {
+  outline: 1px dashed color-mix(in srgb, var(--border-strong) 45%, transparent);
+  outline-offset: -2px;
 }
 
 .ws-slot[data-pattern="diagonal"]::after {
@@ -242,28 +403,30 @@
 }
 
 .ws-slot.is-pouring-out {
-  animation: ws-pour-out 0.24s ease forwards;
+  animation: ws-pour-out 0.34s ease-in forwards;
 }
 
+/* Permukaan turun: slot menyusut ke bawah, bukan berpindah tempat. */
 @keyframes ws-pour-out {
   to {
-    opacity: 0.15;
-    transform: translateY(-6px) scaleY(0.6);
+    opacity: 0.25;
+    transform: scaleY(0.04);
   }
 }
 
 .ws-slot.is-pouring-in {
-  animation: ws-pour-in 0.3s ease-out;
+  animation: ws-pour-in 0.32s ease-out both;
 }
 
+/* Permukaan naik: slot baru tumbuh dari dasar botol. */
 @keyframes ws-pour-in {
   from {
-    opacity: 0.35;
-    transform: translateY(-14px) scaleY(0.7);
+    opacity: 0.6;
+    transform: scaleY(0.08);
   }
   to {
     opacity: 1;
-    transform: none;
+    transform: scaleY(1);
   }
 }
 
@@ -448,11 +611,26 @@
   .ws-bottles {
     gap: 0.7rem 0.5rem;
   }
+
+  .ws-bottle__meter {
+    font-size: 0.6rem;
+  }
 }
 
 /* Kurangi gerakan bagi pemain yang memintanya. */
 @media (prefers-reduced-motion: reduce) {
   .ws-bottle.is-selected {
     transform: none;
+  }
+
+  .ws-bottle.is-valid-target {
+    animation: none;
+    transform: none;
+    box-shadow: 0 0 0 4px var(--accent-soft);
+  }
+
+  .ws-slot.is-pouring-out,
+  .ws-slot.is-pouring-in {
+    animation: none;
   }
 }

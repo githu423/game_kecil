@@ -29,7 +29,9 @@ export const LEVELS = [
     topic: "move",
     instruction:
       "Gunakan move_down() dan move_right() untuk membawa karakter (lingkaran biru) ke bendera tujuan.",
-    hint: "Tulis satu perintah per baris, contoh: move_down() lalu tekan Run.",
+    hint:
+      "Tulis satu perintah per baris, contoh: move_down() lalu tekan Run. " +
+      "Bisa juga digabung: move_down(2) artinya turun dua tile sekaligus.",
     starter: "move_down()\n",
     grid: ["#####", "#S..#", "#.#.#", "#..G#", "#####"],
     maxActions: 6,
@@ -45,7 +47,9 @@ move_right()
     title: "Belok",
     topic: "move",
     instruction: "Jalur ini butuh berbelok. Pakai tiga kali move_down() lalu dua kali move_right().",
-    hint: "Kamu boleh memanggil perintah yang sama berkali-kali.",
+    hint:
+      "Kamu boleh memanggil perintah yang sama berkali-kali, atau memakai angka: " +
+      "move_down(3) untuk tiga tile sekaligus.",
     starter: "move_down()\nmove_down()\n",
     grid: ["#####", "#S..#", "#.#.#", "#.#.#", "#..G#", "#####"],
     maxActions: 8,

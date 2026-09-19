@@ -12,6 +12,7 @@ import {
   CAPACITY,
   COLORS,
   applyMoves,
+  bottleState,
   canPour,
   cloneState,
   colorInfo,
@@ -26,7 +27,10 @@ import {
   stateKey,
   topColor,
   topRun,
+  validTargets,
 } from "./logic.js";
+// main.js aman diimpor dari Node (tidak ada DOM yang disentuh saat impor).
+import { bottleVisualState, createBottleElement } from "./main.js";
 import {
   LEVELS,
   LEVEL_COUNT,
@@ -40,6 +44,20 @@ import {
   pickReverseMove,
   solvedBottles,
 } from "./levels.js";
+
+/** Teks style.css (hanya diisi saat berjalan di Node; di browser diambil dari DOM). */
+const IS_NODE_ENV =
+  typeof process !== "undefined" && Boolean(process.versions) && Boolean(process.versions.node);
+
+const CSS_TEXT = await (async () => {
+  if (!IS_NODE_ENV) return "";
+  try {
+    const { readFile } = await import("node:fs/promises");
+    return await readFile(new URL("./style.css", import.meta.url), "utf8");
+  } catch (error) {
+    return "";
+  }
+})();
 
 /* -----------------------------------------------------------------------------
    Kerangka pengujian ringkas
@@ -67,6 +85,9 @@ function makeReporter() {
     },
     notOk(value, label = "") {
       if (value) throw new Error(`${label} diharapkan false, ternyata ${JSON.stringify(value)}`);
+    },
+    skip(name, reason = "") {
+      results.push({ name, ok: true, skipped: true, message: reason });
     },
     truthyBottles(state, label = "") {
       if (!Array.isArray(state.bottles) || state.bottles.length === 0) {
@@ -431,8 +452,236 @@ export function runTests() {
     t.ok(everyLevelValid, "semua level punya warna 3–12 dan minimal 2 botol kosong");
   });
 
+  /* ------------------------- tujuan yang sah ------------------------- */
+
+  t.check("validTargets: hanya botol kosong atau warna sama dengan ruang", () => {
+    // Botol 1 (indeks 0) bagian atasnya "biru".
+    const state = createState([
+      ["merah", "biru"],
+      [],
+      ["biru", "biru"],
+      ["merah", "merah", "merah", "merah"],
+      ["hijau", "hijau"],
+    ]);
+    t.equal(validTargets(state, 0), [1, 2], "tujuan sah dari botol 1");
+    t.notOk(validTargets(state, 0).includes(0), "botol sumber tidak boleh jadi tujuan sendiri");
+    t.notOk(validTargets(state, 0).includes(3), "botol penuh (selesai) tidak bisa jadi tujuan");
+    t.notOk(validTargets(state, 0).includes(4), "warna paling atas berbeda bukan tujuan");
+    t.equal(validTargets(state, 1), [], "botol kosong tidak punya tujuan");
+  });
+
+  t.check("validTargets: botol selesai tidak pernah jadi tujuan", () => {
+    const state = createState([
+      ["merah", "merah", "merah"],
+      ["merah", "merah", "merah", "merah"],
+      [],
+    ]);
+    const targets = validTargets(state, 0);
+    t.equal(targets, [2], "hanya botol kosong yang sah");
+    t.ok(targets.every((index) => !isBottleDone(state.bottles[index]) || index === 2), "bukan botol selesai");
+  });
+
+  t.check("bottleState: kosong / sebagian / penuh / selesai", () => {
+    t.equal(bottleState([]), "empty", "botol kosong");
+    t.equal(bottleState(["merah"]), "partial", "botol sebagian");
+    t.equal(bottleState(["merah", "merah", "merah"]), "partial", "botol hampir penuh");
+    t.equal(bottleState(["merah", "merah", "merah", "merah"]), "done", "botol selesai");
+    t.equal(bottleState(["merah", "biru", "merah", "biru"]), "full", "botol penuh tapi belum selesai");
+  });
+
+  t.check("kelas status botol mengikuti pilihan (bottleVisualState)", () => {
+    const bottles = [
+      ["merah", "biru"], // 0: sumber terpilih
+      [], // 1: tujuan sah
+      ["hijau", "hijau"], // 2: warna berbeda -> diredupkan
+      ["merah", "merah", "merah", "merah"], // 3: selesai -> diredupkan
+    ];
+    const targets = validTargets({ bottles }, 0);
+    const sumber = bottleVisualState(0, bottles, { selection: 0, targets });
+    const tujuan = bottleVisualState(1, bottles, { selection: 0, targets });
+    const redup = bottleVisualState(2, bottles, { selection: 0, targets });
+    const selesai = bottleVisualState(3, bottles, { selection: 0, targets });
+
+    t.ok(sumber.classes.includes("is-selected"), "botol sumber terpilih");
+    t.ok(tujuan.classes.includes("is-valid-target"), "tujuan disorot");
+    t.notOk(tujuan.classes.includes("is-dimmed"), "tujuan tidak diredupkan");
+    t.ok(redup.classes.includes("is-dimmed"), "botol tidak valid diredupkan");
+    t.ok(selesai.classes.includes("is-done") && selesai.classes.includes("is-dimmed"), "botol selesai ditandai");
+    t.equal(bottleVisualState(0, bottles, { selection: null }).classes, [], "tanpa pilihan tidak ada sorotan");
+    t.equal(
+      bottleVisualState(1, bottles, { selection: null }).classes,
+      ["is-empty"],
+      "botol kosong tetap ditandai walau tidak ada pilihan",
+    );
+  });
+
+  /* ------------------------- kontrak tata letak (CSS) ------------------------- */
+
+  t.check("CSS: slot setinggi tetap dan tidak melar (kontrak anti-flex-grow)", () => {
+    // Dibaca dari berkas style.css (Node) atau dari DOM (browser); kalau tidak terbaca, dilewati.
+    let css = CSS_TEXT;
+    if (!css && typeof document !== "undefined") {
+      const kumpulan = [];
+      for (const sheet of Array.from(document.styleSheets)) {
+        try {
+          kumpulan.push(...Array.from(sheet.cssRules).map((rule) => rule.cssText ?? ""));
+        } catch (error) {
+          /* stylesheet lintas-asal tidak bisa dibaca */
+        }
+      }
+      css = kumpulan.join("\n");
+    }
+    if (!css) {
+      t.skip("kontrak CSS (stylesheet tidak terbaca di lingkungan ini)");
+      return;
+    }
+
+    const blok = (selector) => {
+      const pola = new RegExp(`${selector.replace(/[.\-]/g, "\\$&")}\\s*{([^}]*)}`);
+      const hasil = pola.exec(css);
+      return hasil ? hasil[1] : "";
+    };
+
+    t.ok(
+      /repeat\(\s*var\(--ws-capacity,\s*4\)\s*,\s*var\(--ws-slot-height\)\s*\)/.test(blok(".ws-bottle__glass")),
+      "kaca botol memakai grid 4 baris setinggi var(--ws-slot-height)",
+    );
+    t.ok(!/flex/.test(blok(".ws-slot")), "aturan .ws-slot tidak memakai flex (tinggi tidak diregangkan)");
+    t.ok(!/flex/.test(blok(".ws-gap")), "aturan .ws-gap tidak memakai flex");
+    t.ok(/transform-origin:\s*bottom/.test(blok(".ws-slot")), "animasi cairan tumbuh dari dasar botol");
+    t.ok(/\.is-empty/.test(css) && /border-style:\s*dashed/.test(blok(".ws-bottle.is-empty")), "botol kosong bergaris putus-putus");
+    t.ok(/\.is-done/.test(css) && /content:\s*"✓"/.test(css), "botol selesai diberi tanda centang");
+    t.ok(/\.is-valid-target/.test(css), "tujuan sah punya gaya sendiri");
+    t.ok(/\.is-dimmed/.test(css), "botol tidak valid diredupkan");
+    t.ok(/\.ws-bottle__meter/.test(css), "ada keterangan ruang tersisa (n/4)");
+  });
+
+  /* ------------------------- tampilan botol (perlu DOM) ------------------------- */
+
+  if (typeof document !== "undefined") {
+    /** Papan uji di luar layar supaya tata letaknya benar-benar dihitung browser. */
+    const buatPapanUji = (bottles, opsi = {}) => {
+      const akar = document.createElement("div");
+      akar.className = `ws${opsi.accessible ? " is-accessible" : ""}`;
+      akar.style.cssText = "position:fixed;left:-9999px;top:0;min-height:0";
+      const papan = document.createElement("div");
+      papan.className = "ws-bottles";
+      papan.style.cssText = "display:flex;gap:8px";
+      bottles.forEach((bottle, index) => {
+        papan.append(createBottleElement(index, bottle, { bottles, selection: opsi.selection ?? null }));
+      });
+      akar.append(papan);
+      document.body.append(akar);
+      return akar;
+    };
+
+    t.check("tampilan botol: jumlah slot = isi botol, sisanya slot kosong", () => {
+      const kasus = [[], ["merah"], ["merah", "biru", "biru"], ["hijau", "hijau", "hijau", "hijau"]];
+      const akar = buatPapanUji(kasus);
+      try {
+        const botol = Array.from(akar.querySelectorAll(".ws-bottle"));
+        t.equal(botol.length, kasus.length, "jumlah botol");
+        kasus.forEach((isi, index) => {
+          t.equal(botol[index].querySelectorAll(".ws-slot").length, isi.length, `slot terisi botol ${index + 1}`);
+          t.equal(
+            botol[index].querySelectorAll(".ws-gap").length,
+            CAPACITY - isi.length,
+            `slot kosong botol ${index + 1}`,
+          );
+          t.equal(
+            botol[index].querySelector(".ws-bottle__meter").textContent,
+            `${isi.length}/${CAPACITY}`,
+            `meter botol ${index + 1}`,
+          );
+          t.equal(botol[index].dataset.filled, String(isi.length), `data-filled botol ${index + 1}`);
+        });
+        t.equal(akar.querySelectorAll(".ws-slot, .ws-gap").length, kasus.length * CAPACITY, "total slot");
+      } finally {
+        akar.remove();
+      }
+    });
+
+    t.check("tampilan botol: tinggi tiap slot sama (tidak melar mengisi botol)", () => {
+      const kasus = [["merah"], ["merah", "biru", "biru", "hijau"]];
+      const akar = buatPapanUji(kasus);
+      try {
+        const kaca = akar.querySelector(".ws-bottle__glass");
+        if (kaca.getBoundingClientRect().height === 0) {
+          t.skip("tinggi slot sama (tata letak tidak bisa diukur di lingkungan ini)");
+          return;
+        }
+        const tinggi = (el) => el.getBoundingClientRect().height;
+        const semua = Array.from(akar.querySelectorAll(".ws-slot, .ws-gap"));
+        const pertama = tinggi(semua[0]);
+        for (const el of semua) {
+          t.ok(Math.abs(tinggi(el) - pertama) < 1, `semua slot setinggi ${pertama.toFixed(1)}px`);
+        }
+        t.ok(
+          Math.abs(tinggi(kaca) - pertama * CAPACITY) < 2,
+          `kaca = 4 slot (${tinggi(kaca).toFixed(1)}px vs ${(pertama * CAPACITY).toFixed(1)}px)`,
+        );
+        t.ok(pertama > 8, "tinggi slot masuk akal (bukan 0)");
+      } finally {
+        akar.remove();
+      }
+    });
+
+    t.check("tampilan botol: cairan dirapatkan dari dasar, ruang kosong di atas", () => {
+      const kasus = [["merah", "biru"]];
+      const akar = buatPapanUji(kasus);
+      try {
+        const botol = akar.querySelector(".ws-bottle");
+        if (botol.getBoundingClientRect().height === 0) {
+          t.skip("cairan dari dasar (tata letak tidak bisa diukur di lingkungan ini)");
+          return;
+        }
+        const atas = (el) => el.getBoundingClientRect().top;
+        const slotTeratas = Math.min(...Array.from(botol.querySelectorAll(".ws-slot")).map(atas));
+        const gapTerbawah = Math.max(...Array.from(botol.querySelectorAll(".ws-gap")).map(atas));
+        t.ok(gapTerbawah < slotTeratas - 1, "slot kosong berada di atas cairan");
+        const minGap = Math.min(...Array.from(botol.querySelectorAll(".ws-slot")).map((el) => el.getBoundingClientRect().bottom));
+        const maxGap = Math.max(...Array.from(botol.querySelectorAll(".ws-slot")).map((el) => el.getBoundingClientRect().bottom));
+        t.ok(maxGap > minGap, "lapisan tersusun dari bawah ke atas");
+      } finally {
+        akar.remove();
+      }
+    });
+
+    t.check("tampilan botol: kelas sesuai keadaan (kosong, selesai, tujuan)", () => {
+      const bottles = [["merah", "biru"], [], ["hijau", "hijau", "hijau", "hijau"]];
+      const akar = buatPapanUji(bottles, { selection: 0 });
+      try {
+        const botol = Array.from(akar.querySelectorAll(".ws-bottle"));
+        t.ok(botol[0].classList.contains("is-selected"), "botol sumber terpilih");
+        t.ok(botol[1].classList.contains("is-empty"), "botol kosong bergaris putus-putus");
+        t.ok(botol[1].classList.contains("is-valid-target"), "botol kosong disorot sebagai tujuan");
+        t.ok(botol[1].classList.contains("is-dimmed") === false, "tujuan tidak diredupkan");
+        t.ok(botol[2].classList.contains("is-done"), "botol selesai ditandai");
+        t.ok(botol[2].classList.contains("is-dimmed"), "botol selesai tidak ditawarkan");
+        t.equal(botol[0].getAttribute("aria-pressed"), "true", "status aria-pressed botol terpilih");
+        t.ok(
+          botol[2].getAttribute("aria-label").includes("selesai"),
+          `label botol selesai: ${botol[2].getAttribute("aria-label")}`,
+        );
+        t.ok(
+          botol[1].getAttribute("aria-label").includes("Bisa dituang"),
+          `label tujuan: ${botol[1].getAttribute("aria-label")}`,
+        );
+      } finally {
+        akar.remove();
+      }
+    });
+  }
+
   const passed = t.results.filter((item) => item.ok).length;
-  return { total: t.results.length, passed, failed: t.results.length - passed, results: t.results };
+  const skipped = t.results.filter((item) => item.skipped).length;
+  return {
+    total: t.results.length,
+    passed,
+    failed: t.results.length - passed,
+    skipped,
+    results: t.results,
+  };
 }
 
 /** Solver cepat untuk memeriksa state yang punya botol kosong. */
@@ -469,10 +718,13 @@ if (isNode) {
     const startedAt = Date.now();
     const summary = runTests();
     for (const item of summary.results) {
-      console.log(`[${item.ok ? "  ok  " : " FAIL "}] ${item.name}${item.ok ? "" : ` -> ${item.message}`}`);
+      const tanda = item.skipped ? " lewat " : item.ok ? "  ok  " : " FAIL ";
+      const info = item.skipped ? ` (dilewati: ${item.message})` : item.ok ? "" : ` -> ${item.message}`;
+      console.log(`[${tanda}] ${item.name}${info}`);
     }
     const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
-    console.log(`\n${summary.passed}/${summary.total} pengujian lulus dalam ${seconds}s.`);
+    const dilewati = summary.skipped ? ` (${summary.skipped} dilewati)` : "";
+    console.log(`\n${summary.passed}/${summary.total} pengujian lulus dalam ${seconds}s${dilewati}.`);
     if (summary.failed > 0) process.exitCode = 1;
   }
 }
