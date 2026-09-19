@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Water Sort — Portal Game Kecil</title>
+    <meta
+      name="description"
+      content="Puzzle menyortir warna ke dalam botol. 20 level bertingkat plus mode acak, ada petunjuk dan mode aksesibel."
+    />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A7%AA%3C/text%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="../../css/base.css" />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body class="ws">
+    <a class="skip-link" href="#wsBoard">Langsung ke papan permainan</a>
+
+    <header class="ws-header">
+      <div class="ws-header__inner">
+        <a class="btn btn-ghost" href="../../index.html">← Kembali ke menu</a>
+        <div class="ws-header__title">
+          <span aria-hidden="true">🧪</span>
+          <strong>Water Sort</strong>
+        </div>
+        <div class="ws-stats" role="status">
+          <span class="badge" id="wsLevel">Level 1</span>
+          <span class="badge">Langkah: <strong id="wsMoves">0</strong></span>
+          <span class="badge" title="Perkiraan jumlah langkah paling sedikit untuk level ini"
+            >Target: <strong id="wsPar">–</strong></span
+          >
+          <span class="badge">Selesai: <strong id="wsDone">0</strong></span>
+        </div>
+      </div>
+    </header>
+
+    <main class="ws-main">
+      <h1 class="visually-hidden">Water Sort — susun warna di dalam botol</h1>
+
+      <section class="ws-board-card" aria-labelledby="wsBoardTitle">
+        <div class="ws-board-head">
+          <h2 id="wsBoardTitle">Papan</h2>
+          <p class="ws-tip" id="wsTip"></p>
+        </div>
+
+        <!-- Papan: botol-botol + lapisan animasi tuang -->
+        <div class="ws-board" id="wsBoardWrap">
+          <div class="ws-bottles" id="wsBoard"></div>
+          <div class="ws-stream" id="wsStream" hidden aria-hidden="true"></div>
+        </div>
+
+        <p class="ws-message" id="wsMessage" aria-live="polite">
+          Pilih satu botol, lalu pilih botol tujuan.
+        </p>
+
+        <div class="ws-win" id="wsWin" hidden role="dialog" aria-labelledby="wsWinText" aria-modal="false">
+          <p class="ws-win__text" id="wsWinText">🎉 Level selesai!</p>
+          <div class="row">
+            <button class="btn btn-primary" id="wsNextLevel" type="button">Level berikutnya ▶</button>
+            <button class="btn" id="wsWinReplay" type="button">↺ Main lagi</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="ws-controls-card" aria-labelledby="wsControlsTitle">
+        <h2 id="wsControlsTitle" class="ws-h2">Kontrol</h2>
+
+        <div class="ws-controls">
+          <button class="btn" id="wsUndo" type="button">↶ Batal</button>
+          <button class="btn" id="wsRestart" type="button">↺ Ulang level</button>
+          <button class="btn" id="wsHint" type="button">💡 Petunjuk</button>
+          <button class="btn" id="wsExtraBottle" type="button">＋1 botol kosong</button>
+          <button class="btn" id="wsRandom" type="button">🎲 Acak</button>
+        </div>
+
+        <label class="ws-toggle">
+          <input type="checkbox" id="wsAccessible" />
+          <span>Mode aksesibel (tambah simbol &amp; pola warna)</span>
+        </label>
+
+        <h2 class="ws-h2">Level</h2>
+        <p class="ws-hint-text">
+          Tekan tombol level untuk pindah. Level yang lebih tinggi terbuka setelah level
+          sebelumnya selesai.
+        </p>
+        <nav class="ws-levels" id="wsLevels" aria-label="Daftar level"></nav>
+
+        <h2 class="ws-h2">Cara bermain</h2>
+        <ul class="ws-rules">
+          <li>Ketuk botol untuk memilih, ketuk botol lain untuk menuang.</li>
+          <li>Hanya bisa menuang ke botol kosong atau ke warna yang sama.</li>
+          <li>Menuang ke botol yang tidak cocok hanya membuat botol bergetar.</li>
+          <li>Salah langkah tidak apa-apa: tekan ↶ Batal untuk kembali ke langkah sebelumnya.</li>
+          <li>Menang kalau setiap botol kosong atau berisi satu warna penuh.</li>
+        </ul>
+
+        <p class="ws-note">
+          Tersedia juga <a href="../python-adventure/index.html">Python Adventure</a> di portal ini.
+        </p>
+      </section>
+    </main>
+
+    <footer class="ws-footer">
+      <p>
+        <a href="../../index.html">← Kembali ke menu</a>
+        <span aria-hidden="true">•</span>
+        <a href="./tests.html">Jalankan pengujian logika</a>
+      </p>
+    </footer>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

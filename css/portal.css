@@ -1,0 +1,262 @@
+/* portal.css — gaya halaman menu portal. */
+
+.portal {
+  background:
+    radial-gradient(1200px 500px at 15% -10%, var(--accent-soft), transparent 60%),
+    radial-gradient(900px 400px at 90% 0%, var(--surface-2), transparent 55%),
+    var(--bg);
+}
+
+/* ---------------------------------------------------------------
+   Header
+   --------------------------------------------------------------- */
+.portal-header {
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-elevated) 85%, transparent);
+  backdrop-filter: blur(8px);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.portal-header__inner {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0.7rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.portal-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.portal-brand__mark {
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
+.portal-theme {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+/* ---------------------------------------------------------------
+   Isi utama
+   --------------------------------------------------------------- */
+.portal-main {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 2rem 1rem 3rem;
+}
+
+.portal-hero {
+  margin-bottom: 2.25rem;
+}
+
+.portal-hero h1 {
+  font-size: clamp(1.7rem, 4.5vw, 2.6rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.5rem;
+}
+
+.portal-hero__lead {
+  max-width: 62ch;
+  color: var(--text-muted);
+  font-size: 1.05rem;
+}
+
+.portal-hero__facts {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.portal-hero__facts li {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.3rem 0.8rem;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  box-shadow: var(--shadow-1);
+}
+
+.portal-section-title {
+  font-size: 1.15rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 1rem;
+}
+
+/* ---------------------------------------------------------------
+   Kartu game
+   --------------------------------------------------------------- */
+.portal-cards {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+}
+
+.game-card {
+  --card-accent: var(--accent);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+  box-shadow: var(--shadow-1);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.game-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 4px;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  background: var(--card-accent);
+}
+
+.game-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-2);
+  border-color: var(--border-strong);
+}
+
+.game-card[data-accent="teal"] {
+  --card-accent: #14b8a6;
+}
+
+.game-card[data-accent="violet"] {
+  --card-accent: #8b5cf6;
+}
+
+.game-card__head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.35rem;
+}
+
+.game-card__icon {
+  font-size: 2rem;
+  line-height: 1;
+  width: 3rem;
+  height: 3rem;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  flex: 0 0 auto;
+}
+
+.game-card__title {
+  margin: 0;
+  font-size: 1.3rem;
+  letter-spacing: -0.01em;
+}
+
+.game-card__tagline {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.game-card__desc {
+  color: var(--text-muted);
+  margin: 0;
+  flex: 1 1 auto;
+}
+
+.game-card__tags {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.game-card__tags li {
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.game-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 0.25rem;
+}
+
+.game-card__progress {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.game-card__play {
+  text-decoration: none;
+  background: var(--card-accent);
+  border-color: var(--card-accent);
+  color: #fff;
+  font-weight: 700;
+  padding: 0.6rem 1.1rem;
+}
+
+.game-card__play:hover {
+  filter: brightness(1.08);
+  color: #fff;
+}
+
+/* ---------------------------------------------------------------
+   Footer
+   --------------------------------------------------------------- */
+.portal-footer {
+  border-top: 1px solid var(--border);
+  padding: 1.5rem 1rem 2.5rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.portal-footer p {
+  max-width: 70ch;
+  margin-inline: auto;
+}
+
+.portal-footer__muted {
+  font-size: 0.82rem;
+  opacity: 0.85;
+}
+
+@media (max-width: 480px) {
+  .portal-theme span:last-child {
+    display: none;
+  }
+}
