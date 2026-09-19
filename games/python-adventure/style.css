@@ -1,0 +1,582 @@
+/* style.css — tampilan Python Adventure.
+   Warna memakai token dari ../../css/base.css, jadi tema terang/gelap ikut portal.
+   Palet canvas juga didefinisikan di sini (--pa-*) supaya renderer.js bisa membacanya. */
+
+/* ---------------------------------------------------------------
+   Palet khusus canvas (dibaca JS lewat getComputedStyle)
+   --------------------------------------------------------------- */
+:root {
+  --pa-floor: #e8edf8;
+  --pa-floor-alt: #dee5f4;
+  --pa-wall: #3a4664;
+  --pa-wall-top: #55658a;
+  --pa-rock: #94a3b8;
+  --pa-rock-dark: #64748b;
+  --pa-goal: #16a34a;
+  --pa-goal-pole: #475569;
+  --pa-key: #d97706;
+  --pa-coin: #eab308;
+  --pa-door: #a16207;
+  --pa-hero: #2563eb;
+  --pa-hero-dark: #1e40af;
+  --pa-ink: #0f172a;
+  --pa-slash: #f8fafc;
+  --pa-text: #16203a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --pa-floor: #1b2437;
+    --pa-floor-alt: #202b42;
+    --pa-wall: #46527a;
+    --pa-wall-top: #5d6b98;
+    --pa-rock: #7c8aa5;
+    --pa-rock-dark: #55637d;
+    --pa-goal: #34d399;
+    --pa-goal-pole: #cbd5e1;
+    --pa-key: #fbbf24;
+    --pa-coin: #facc15;
+    --pa-door: #ca8a04;
+    --pa-hero: #7aa2ff;
+    --pa-hero-dark: #4c76d8;
+    --pa-ink: #0b1020;
+    --pa-slash: #e2e8f0;
+    --pa-text: #eaeefb;
+  }
+}
+
+:root[data-theme="light"] {
+  --pa-floor: #e8edf8;
+  --pa-floor-alt: #dee5f4;
+  --pa-wall: #3a4664;
+  --pa-wall-top: #55658a;
+  --pa-rock: #94a3b8;
+  --pa-rock-dark: #64748b;
+  --pa-goal: #16a34a;
+  --pa-goal-pole: #475569;
+  --pa-key: #d97706;
+  --pa-coin: #eab308;
+  --pa-door: #a16207;
+  --pa-hero: #2563eb;
+  --pa-hero-dark: #1e40af;
+  --pa-ink: #0f172a;
+  --pa-slash: #f8fafc;
+  --pa-text: #16203a;
+}
+
+:root[data-theme="dark"] {
+  --pa-floor: #1b2437;
+  --pa-floor-alt: #202b42;
+  --pa-wall: #46527a;
+  --pa-wall-top: #5d6b98;
+  --pa-rock: #7c8aa5;
+  --pa-rock-dark: #55637d;
+  --pa-goal: #34d399;
+  --pa-goal-pole: #cbd5e1;
+  --pa-key: #fbbf24;
+  --pa-coin: #facc15;
+  --pa-door: #ca8a04;
+  --pa-hero: #7aa2ff;
+  --pa-hero-dark: #4c76d8;
+  --pa-ink: #0b1020;
+  --pa-slash: #e2e8f0;
+  --pa-text: #eaeefb;
+}
+
+/* ---------------------------------------------------------------
+   Kerangka halaman
+   --------------------------------------------------------------- */
+.pa {
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+.pa-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.pa-header__inner {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0.6rem 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pa-header__title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.05rem;
+}
+
+.pa-header__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--text-muted);
+}
+
+.pa-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex: none;
+}
+
+.pa-dot[data-stage="loading"] {
+  background: var(--warn);
+  animation: pa-pulse 1.1s ease-in-out infinite;
+}
+
+.pa-dot[data-stage="ready"] {
+  background: var(--ok);
+}
+
+.pa-dot[data-stage="error"] {
+  background: var(--danger);
+}
+
+/* Bilah progres unduhan Python (tampil hanya saat memuat). */
+.pa-progress {
+  width: 7rem;
+  height: 0.55rem;
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  background: var(--surface-2);
+  overflow: hidden;
+  accent-color: var(--accent);
+}
+
+.pa-progress[hidden] {
+  display: none;
+}
+
+.pa-progress::-webkit-progress-bar {
+  background: var(--surface-2);
+}
+
+.pa-progress::-webkit-progress-value {
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
+.pa-progress::-moz-progress-bar {
+  background: var(--accent);
+}
+
+@keyframes pa-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.8);
+  }
+}
+
+.pa-main {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 1rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.pa-board,
+.pa-play {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-1);
+  padding: 1rem;
+  min-width: 0;
+}
+
+.pa-board__head,
+.pa-play__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.pa-board__head h2,
+.pa-play__head h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.pa-meta {
+  margin: 0.15rem 0 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.pa-instruction {
+  background: var(--surface-2);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.7rem;
+  margin: 0 0 0.8rem;
+  font-size: 0.92rem;
+}
+
+.pa-canvas-wrap {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--surface-2);
+  line-height: 0;
+}
+
+#paCanvas {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* ---------------------------------------------------------------
+   Pesan status / hasil
+   --------------------------------------------------------------- */
+.pa-banner {
+  margin: 0.8rem 0 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.pa-banner.is-good {
+  background: var(--ok-soft);
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.pa-banner.is-warn {
+  background: var(--warn-soft);
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.pa-banner.is-error {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.pa-next {
+  margin: 0.6rem 0 0;
+}
+
+.pa-step {
+  margin: 0.6rem 0 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  min-height: 1.3em;
+}
+
+.pa-hint {
+  margin-top: 0.8rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.7rem;
+  background: var(--surface-2);
+  font-size: 0.9rem;
+}
+
+.pa-hint summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.pa-hint p {
+  margin: 0.5rem 0 0;
+}
+
+/* ---------------------------------------------------------------
+   Daftar level
+   --------------------------------------------------------------- */
+.pa-levels {
+  margin-top: 0.9rem;
+}
+
+.pa-levels__label {
+  display: block;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-bottom: 0.3rem;
+}
+
+.pa-levels__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(2.6rem, 1fr));
+  gap: 0.35rem;
+}
+
+.pa-level {
+  justify-content: center;
+  padding: 0.35rem 0.2rem;
+  min-width: 2.4rem;
+  font-size: 0.86rem;
+  background: var(--surface-2);
+}
+
+.pa-level.is-done {
+  border-color: var(--ok);
+  color: var(--ok);
+  background: var(--ok-soft);
+}
+
+.pa-level.is-current {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.pa-level:disabled {
+  opacity: 0.4;
+}
+
+/* ---------------------------------------------------------------
+   Kontrol
+   --------------------------------------------------------------- */
+.pa-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.pa-kbd {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  opacity: 0.85;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  padding: 0 0.25rem;
+}
+
+.pa-speed {
+  margin: 0.3rem 0 0.8rem;
+  font-size: 0.88rem;
+}
+
+.pa-speed label {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.pa-speed input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.pa-speed__ticks {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+/* ---------------------------------------------------------------
+   Editor
+   --------------------------------------------------------------- */
+.pa-editor {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.pa-gutter {
+  flex: none;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0.7rem 0.4rem;
+  text-align: right;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  border-right: 1px solid var(--border);
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.pa-gutter__line {
+  height: 1.6em;
+  padding-right: 0.2rem;
+}
+
+.pa-gutter__line.is-current {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.pa-gutter__line.is-error {
+  color: var(--danger);
+  font-weight: 700;
+  background: var(--danger-soft);
+}
+
+.pa-code {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 240px;
+  padding: 0.7rem 0.75rem;
+  border: 0;
+  border-radius: 0;
+  resize: vertical;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  white-space: pre;
+  overflow: auto;
+  tab-size: 4;
+}
+
+.pa-code:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.pa-tip {
+  margin: 0.5rem 0 0.9rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+/* ---------------------------------------------------------------
+   Output & error
+   --------------------------------------------------------------- */
+.pa-subtitle {
+  font-size: 0.95rem;
+  margin: 0.4rem 0 0.35rem;
+}
+
+.pa-output {
+  margin: 0;
+  min-height: 6.5rem;
+  max-height: 14rem;
+  overflow: auto;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.pa-output:empty::before {
+  content: "(belum ada output — pakai print(...) untuk menampilkan sesuatu)";
+  color: var(--text-muted);
+}
+
+.pa-error {
+  margin-top: 0.7rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.pa-error__line {
+  margin: 0 0 0.25rem;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.pa-error__friendly {
+  margin: 0 0 0.4rem;
+  font-weight: 600;
+}
+
+.pa-error details summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.pa-error pre {
+  margin: 0.4rem 0 0;
+  max-height: 12rem;
+  overflow: auto;
+  padding: 0.5rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+}
+
+.pa-note {
+  margin: 0.9rem 0 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.pa-footer {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 1rem 1rem 2rem;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+.pa-footer p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+/* ---------------------------------------------------------------
+   Layar kecil: papan dan editor menumpuk ke bawah
+   --------------------------------------------------------------- */
+@media (max-width: 900px) {
+  .pa-main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pa-code {
+    min-height: 200px;
+  }
+}
+
+@media (max-width: 520px) {
+  .pa-main {
+    padding: 0.7rem;
+  }
+
+  .pa-board,
+  .pa-play {
+    padding: 0.75rem;
+  }
+}

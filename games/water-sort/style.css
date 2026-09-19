@@ -1,0 +1,636 @@
+/* style.css — tampilan Water Sort.
+   Memakai token dari ../../css/base.css supaya tema terang/gelap seragam dengan portal. */
+
+:root {
+  --ws-bottle-width: 58px;
+  --ws-slot-height: 38px;
+  --ws-glass: rgba(255, 255, 255, 0.35);
+  --ws-glass-dark: rgba(15, 23, 42, 0.25);
+}
+
+/* ---------------------------------------------------------------
+   Kerangka halaman
+   --------------------------------------------------------------- */
+.ws {
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+.ws-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.ws-header__inner {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0.6rem 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ws-header__title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.05rem;
+}
+
+.ws-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.ws-main {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 1rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.ws-board-card,
+.ws-controls-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-1);
+  padding: 1rem;
+  min-width: 0;
+}
+
+.ws-board-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.8rem;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+}
+
+.ws-h2 {
+  font-size: 0.95rem;
+  margin: 0.9rem 0 0.4rem;
+}
+
+.ws-h2:first-of-type {
+  margin-top: 0;
+}
+
+.ws-tip {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* Legenda singkat di bawah papan: arti angka n/4 dan tanda pada botol. */
+.ws-legend {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.9rem;
+  padding: 0;
+  margin: 0.55rem 0 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.ws-legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.ws-legend__mark {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.5rem;
+  height: 1.1rem;
+  padding: 0 0.25rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+}
+
+.ws-legend__mark--empty {
+  border-style: dashed;
+  background: transparent;
+}
+
+.ws-legend__mark--done {
+  border-color: var(--ok);
+  background: var(--ok-soft);
+  color: var(--ok);
+  font-weight: 800;
+}
+
+.ws-legend__mark--target {
+  border-color: var(--accent);
+  border-style: dashed;
+  background: var(--accent-soft);
+}
+
+/* ---------------------------------------------------------------
+   Papan & botol
+   --------------------------------------------------------------- */
+.ws-board {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  padding: 1.1rem 0.6rem 1.4rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
+  overflow: hidden;
+}
+
+.ws-bottles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem 0.7rem;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.ws-bottle {
+  --slot: var(--surface-3);
+  position: relative;
+  width: var(--ws-bottle-width);
+  /* Tinggi tidak dipaksa: kaca = 4 slot tetap, ditambah baris keterangan "n/4". */
+  padding: 7px 6px 5px;
+  display: grid;
+  grid-template-rows: auto auto;
+  gap: 4px;
+  align-items: stretch;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface) 92%, transparent),
+    var(--surface-2)
+  );
+  border: 2px solid var(--border-strong);
+  border-radius: 10px 10px 18px 18px;
+  box-shadow: inset 0 0 0 1px var(--ws-glass), var(--shadow-1);
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+  touch-action: manipulation;
+}
+
+/* Kaca botol: tepat CAPACITY slot setinggi SAMA, terisi dari dasar ke atas.
+   Tidak ada flex-grow: satu slot = satu tinggi tetap, sisa ruang tetap kosong. */
+.ws-bottle__glass {
+  position: relative;
+  display: grid;
+  grid-template-rows: repeat(var(--ws-capacity, 4), var(--ws-slot-height));
+  overflow: hidden;
+  border-radius: 6px 6px 12px 12px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-3) 45%, transparent),
+    color-mix(in srgb, var(--surface-3) 90%, transparent)
+  );
+}
+
+/* Garis tick tipis di setiap batas slot, supaya jumlah slot gampang dihitung. */
+.ws-bottle__glass::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--ws-slot-height) - 1px),
+    color-mix(in srgb, var(--border-strong) 60%, transparent) calc(var(--ws-slot-height) - 1px),
+    color-mix(in srgb, var(--border-strong) 60%, transparent) var(--ws-slot-height)
+  );
+}
+
+/* Keterangan ruang tersisa di bawah botol, mis. "2/4". */
+.ws-bottle__meter {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  line-height: 1.2;
+  text-align: center;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+
+.ws-bottle:disabled {
+  opacity: 0.9;
+}
+
+.ws-bottle::before {
+  /* garis permukaan botol (efek kaca) */
+  content: "";
+  position: absolute;
+  inset: 6px auto auto 7px;
+  width: 4px;
+  height: 40%;
+  border-radius: 4px;
+  background: linear-gradient(180deg, var(--ws-glass), transparent);
+  pointer-events: none;
+}
+
+.ws-bottle:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.ws-bottle.is-selected {
+  border-color: var(--accent);
+  transform: translateY(-14px);
+  box-shadow: 0 0 0 4px var(--accent-soft), var(--shadow-2);
+}
+
+/* Botol kosong: garis tepi putus-putus (tidak hanya mengandalkan warna). */
+.ws-bottle.is-empty {
+  border-style: dashed;
+}
+
+/* Botol selesai (penuh satu warna): centang + glow hijau, tidak bisa dipilih. */
+.ws-bottle.is-done {
+  border-color: var(--ok);
+  box-shadow: 0 0 0 3px var(--ok-soft), 0 0 14px var(--ok-soft);
+  cursor: default;
+}
+
+.ws-bottle.is-done::after {
+  content: "✓";
+  position: absolute;
+  top: -0.5rem;
+  right: -0.4rem;
+  width: 1.1rem;
+  height: 1.1rem;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--ok);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 800;
+  box-shadow: var(--shadow-1);
+}
+
+/* Tujuan yang sah setelah botol sumber dipilih (dipakai logic.js: validTargets). */
+.ws-bottle.is-valid-target {
+  border-color: var(--accent);
+  border-style: dashed;
+  transform: translateY(-6px);
+  animation: ws-target-glow 1.6s ease-in-out infinite;
+}
+
+.ws-bottle.is-valid-target .ws-bottle__meter {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* Botol yang tidak boleh dituang sekarang: diredupkan. */
+.ws-bottle.is-dimmed {
+  opacity: 0.4;
+  filter: saturate(0.5);
+}
+
+.ws-bottle.is-done.is-dimmed {
+  opacity: 0.6;
+}
+
+@keyframes ws-target-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  50% {
+    box-shadow: 0 0 0 7px var(--accent-soft);
+  }
+}
+
+.ws-bottle.is-lifted {
+  z-index: 4;
+  transition: transform 0.26s cubic-bezier(0.34, 1.3, 0.64, 1), border-color 0.2s ease;
+}
+
+.ws-bottle.is-hint-source {
+  border-color: var(--warn);
+  box-shadow: 0 0 0 3px var(--warn-soft), var(--shadow-2);
+}
+
+.ws-bottle.is-hint-target {
+  border-color: var(--ok);
+  box-shadow: 0 0 0 3px var(--ok-soft), var(--shadow-2);
+}
+
+.ws-bottle.is-shaking {
+  animation: ws-shake 0.42s ease-in-out;
+}
+
+@keyframes ws-shake {
+  0%,
+  100% {
+    transform: translateX(0) rotate(0);
+  }
+  20% {
+    transform: translateX(-5px) rotate(-2.5deg);
+  }
+  40% {
+    transform: translateX(5px) rotate(2.5deg);
+  }
+  60% {
+    transform: translateX(-4px) rotate(-2deg);
+  }
+  80% {
+    transform: translateX(3px) rotate(1.5deg);
+  }
+}
+
+/* Satu slot cairan: tinggi tetap (satu baris grid), selalu tumbuh dari dasar. */
+.ws-slot {
+  position: relative;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--slot);
+  transform-origin: bottom center;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), inset 0 -1px 0 rgba(0, 0, 0, 0.18);
+}
+
+/* Slot yang masih kosong: tingginya sama, hanya tanpa warna. */
+.ws-gap {
+  border-radius: 2px;
+}
+
+/* Mode aksesibel: batas slot tetap terlihat walau botol masih kosong. */
+.ws.is-accessible .ws-gap {
+  outline: 1px dashed color-mix(in srgb, var(--border-strong) 45%, transparent);
+  outline-offset: -2px;
+}
+
+.ws-slot[data-pattern="diagonal"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.55) 0 2px,
+    transparent 2px 7px
+  );
+}
+
+.ws-slot__symbol {
+  display: none;
+  position: absolute;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
+/* Mode aksesibel: tampilkan simbol di setiap lapisan. */
+.ws.is-accessible .ws-slot__symbol {
+  display: flex;
+}
+
+.ws-slot.is-pouring-out {
+  animation: ws-pour-out 0.34s ease-in forwards;
+}
+
+/* Permukaan turun: slot menyusut ke bawah, bukan berpindah tempat. */
+@keyframes ws-pour-out {
+  to {
+    opacity: 0.25;
+    transform: scaleY(0.04);
+  }
+}
+
+.ws-slot.is-pouring-in {
+  animation: ws-pour-in 0.32s ease-out both;
+}
+
+/* Permukaan naik: slot baru tumbuh dari dasar botol. */
+@keyframes ws-pour-in {
+  from {
+    opacity: 0.6;
+    transform: scaleY(0.08);
+  }
+  to {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+/* Aliran cairan saat menuang (diposisikan oleh main.js). */
+.ws-stream {
+  position: absolute;
+  width: 7px;
+  border-radius: 4px;
+  background: var(--stream, var(--accent));
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35) inset;
+  pointer-events: none;
+  transform-origin: top center;
+  animation: ws-flow 0.4s linear;
+}
+
+@keyframes ws-flow {
+  from {
+    transform: scaleY(0.15);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+  to {
+    transform: scaleY(1);
+    opacity: 0.9;
+  }
+}
+
+/* ---------------------------------------------------------------
+   Pesan & panel menang
+   --------------------------------------------------------------- */
+.ws-message {
+  margin: 0.8rem 0 0;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  min-height: 1.4em;
+}
+
+.ws-message.is-error {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.ws-message.is-hint {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.ws-win {
+  margin-top: 0.9rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--ok);
+  border-radius: var(--radius-sm);
+  background: var(--ok-soft);
+}
+
+.ws-win__text {
+  margin: 0 0 0.6rem;
+  font-weight: 700;
+  color: var(--ok);
+}
+
+/* ---------------------------------------------------------------
+   Kontrol
+   --------------------------------------------------------------- */
+.ws-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.ws-toggle {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  margin-top: 0.9rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.ws-toggle input {
+  margin-top: 0.25rem;
+  accent-color: var(--accent);
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.ws-hint-text {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin: 0 0 0.5rem;
+}
+
+.ws-levels {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(2.6rem, 1fr));
+  gap: 0.35rem;
+}
+
+.ws-level-btn {
+  justify-content: center;
+  padding: 0.35rem 0.2rem;
+  min-width: 2.4rem;
+  font-size: 0.86rem;
+  background: var(--surface-2);
+}
+
+.ws-level-btn.is-done {
+  border-color: var(--ok);
+  color: var(--ok);
+  background: var(--ok-soft);
+}
+
+.ws-level-btn.is-current {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.ws-level-btn:disabled {
+  opacity: 0.4;
+}
+
+.ws-rules {
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.ws-rules li {
+  margin-bottom: 0.25rem;
+}
+
+.ws-note {
+  margin: 0.9rem 0 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.ws-footer {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 1rem 1rem 2rem;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+.ws-footer p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+/* ---------------------------------------------------------------
+   Layar kecil
+   --------------------------------------------------------------- */
+@media (max-width: 900px) {
+  .ws-main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 520px) {
+  :root {
+    --ws-bottle-width: 46px;
+    --ws-slot-height: 30px;
+  }
+
+  .ws-main {
+    padding: 0.7rem;
+  }
+
+  .ws-board-card,
+  .ws-controls-card {
+    padding: 0.75rem;
+  }
+
+  .ws-bottles {
+    gap: 0.7rem 0.5rem;
+  }
+
+  .ws-bottle__meter {
+    font-size: 0.6rem;
+  }
+}
+
+/* Kurangi gerakan bagi pemain yang memintanya. */
+@media (prefers-reduced-motion: reduce) {
+  .ws-bottle.is-selected {
+    transform: none;
+  }
+
+  .ws-bottle.is-valid-target {
+    animation: none;
+    transform: none;
+    box-shadow: 0 0 0 4px var(--accent-soft);
+  }
+
+  .ws-slot.is-pouring-out,
+  .ws-slot.is-pouring-in {
+    animation: none;
+  }
+}

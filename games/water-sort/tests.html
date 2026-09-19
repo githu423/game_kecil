@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pengujian Water Sort — Portal Game Kecil</title>
+    <meta name="description" content="Menjalankan pengujian logika Water Sort langsung di browser." />
+    <link rel="stylesheet" href="../../css/base.css" />
+    <!-- style.css dimuat supaya pengujian tampilan botol mengukur tata letak asli. -->
+    <link rel="stylesheet" href="./style.css" />
+    <style>
+      .uji-wrap {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 1.25rem 1rem 3rem;
+      }
+
+      .uji-list {
+        list-style: none;
+        padding: 0;
+        margin: 1rem 0 0;
+        display: grid;
+        gap: 0.35rem;
+      }
+
+      .uji-item {
+        display: flex;
+        gap: 0.6rem;
+        align-items: flex-start;
+        padding: 0.45rem 0.6rem;
+        border: 1px solid var(--border);
+        border-left-width: 4px;
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        font-size: 0.9rem;
+      }
+
+      .uji-item.is-ok {
+        border-left-color: var(--ok);
+      }
+
+      .uji-item.is-fail {
+        border-left-color: var(--danger);
+        background: var(--danger-soft);
+      }
+
+      .uji-mark {
+        font-family: var(--font-mono);
+        font-weight: 700;
+      }
+
+      .uji-item.is-ok .uji-mark {
+        color: var(--ok);
+      }
+
+      .uji-item.is-fail .uji-mark {
+        color: var(--danger);
+      }
+
+      .uji-item.is-skip {
+        border-left-color: var(--border-strong);
+        color: var(--text-muted);
+      }
+
+      .uji-msg {
+        display: block;
+        color: var(--danger);
+        font-family: var(--font-mono);
+        font-size: 0.8rem;
+        margin-top: 0.2rem;
+      }
+
+      .uji-summary {
+        margin-top: 1rem;
+        padding: 0.7rem 0.9rem;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        background: var(--surface-2);
+        font-weight: 700;
+      }
+
+      .uji-summary.is-ok {
+        border-color: var(--ok);
+        background: var(--ok-soft);
+        color: var(--ok);
+      }
+
+      .uji-summary.is-fail {
+        border-color: var(--danger);
+        background: var(--danger-soft);
+        color: var(--danger);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="uji-wrap">
+      <p><a class="btn btn-ghost" href="./index.html">← Kembali ke Water Sort</a></p>
+      <h1>Pengujian Water Sort</h1>
+      <p>
+        Halaman ini menjalankan pengujian aturan penuangan, solver, generator level, dan
+        <strong>tampilan botol</strong> (jumlah slot, tinggi slot yang sama, serta penentuan
+        tujuan yang sah). Berkasnya <code>tests.js</code>; versi Node-nya:
+        <code>node games/water-sort/tests.js</code> (tanpa pengujian tampilan).
+      </p>
+      <p class="uji-summary" id="ujiSummary">Menjalankan pengujian…</p>
+      <ul class="uji-list" id="ujiList"></ul>
+      <p class="uji-note">
+        Pengujian ini juga memastikan setiap level bisa diselesaikan dan jumlah setiap warna
+        selalu 4 lapis.
+      </p>
+      <p><a href="../../index.html">← Kembali ke menu</a></p>
+    </div>
+
+    <script type="module">
+      import { runTests } from "./tests.js";
+
+      const summaryEl = document.getElementById("ujiSummary");
+      const listEl = document.getElementById("ujiList");
+
+      function render(summary, seconds) {
+        const dilewati = summary.skipped ? ` — ${summary.skipped} dilewati` : "";
+        summaryEl.textContent = `${summary.passed}/${summary.total} pengujian lulus (${seconds}s)${dilewati}${
+          summary.failed ? ` — ${summary.failed} gagal` : " — semua sehat ✅"
+        }`;
+        summaryEl.classList.add(summary.failed ? "is-fail" : "is-ok");
+
+        const fragment = document.createDocumentFragment();
+        for (const item of summary.results) {
+          const li = document.createElement("li");
+          const keadaan = item.skipped ? "is-skip" : item.ok ? "is-ok" : "is-fail";
+          li.className = `uji-item ${keadaan}`;
+
+          const mark = document.createElement("span");
+          mark.className = "uji-mark";
+          mark.textContent = item.skipped ? "lewat" : item.ok ? "ok" : "gagal";
+
+          const text = document.createElement("span");
+          text.textContent = item.name;
+          if (!item.ok) {
+            const message = document.createElement("span");
+            message.className = "uji-msg";
+            message.textContent = item.message;
+            text.append(message);
+          }
+
+          li.append(mark, text);
+          fragment.append(li);
+        }
+        listEl.replaceChildren(fragment);
+      }
+
+      try {
+        const startedAt = performance.now();
+        const summary = await runTests();
+        render(summary, ((performance.now() - startedAt) / 1000).toFixed(1));
+      } catch (error) {
+        summaryEl.textContent = `Gagal menjalankan pengujian: ${error?.message ?? error}`;
+        summaryEl.classList.add("is-fail");
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Python Adventure — Portal Game Kecil</title>
+    <meta
+      name="description"
+      content="Tulis kode Python untuk mengantar karakter melewati labirin 15 level. Python berjalan di browser memakai Pyodide."
+    />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%90%8D%3C/text%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="../../css/base.css" />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body class="pa">
+    <a class="skip-link" href="#papan">Lompat ke papan permainan</a>
+
+    <header class="pa-header">
+      <div class="pa-header__inner">
+        <a class="btn btn-ghost" href="../../index.html">← Kembali ke menu</a>
+        <div class="pa-header__title">
+          <span aria-hidden="true">🐍</span>
+          <strong>Python Adventure</strong>
+        </div>
+        <p class="pa-header__status">
+          <span class="pa-dot" id="paPyDot" data-stage="idle" aria-hidden="true"></span>
+          <!-- Teks status diperbarui lewat textContent, jadi titik status dan bilah
+               progres dipisah supaya tidak ikut terhapus. -->
+          <span id="paStatus" role="status">Python belum dimuat</span>
+          <progress
+            class="pa-progress"
+            id="paPyProgress"
+            max="100"
+            value="0"
+            aria-label="Progres memuat Python"
+            hidden
+          ></progress>
+        </p>
+      </div>
+    </header>
+
+    <main class="pa-main">
+      <h1 class="visually-hidden">Python Adventure — belajar Python dengan labirin</h1>
+
+      <!-- Papan papan: canvas + level -->
+      <section class="pa-board" id="papan" aria-labelledby="paLevelTitle">
+        <div class="pa-board__head">
+          <div>
+            <h2 id="paLevelTitle">Level 1</h2>
+            <p class="pa-meta" id="paLevelMeta"></p>
+          </div>
+          <div class="pa-board__keys">
+            <span class="badge" id="paChallenge" hidden></span>
+          </div>
+        </div>
+
+        <p class="pa-instruction" id="paLevelInstruction"></p>
+
+        <div class="pa-canvas-wrap">
+          <canvas id="paCanvas" role="img" aria-label="Papan permainan" width="480" height="320"></canvas>
+        </div>
+
+        <p class="pa-banner" id="paBanner" hidden></p>
+        <p class="pa-next">
+          <button class="btn btn-primary" id="paNextLevel" type="button" hidden>
+            Level berikutnya ▶
+          </button>
+        </p>
+        <p class="pa-step" id="paStepStatus">Belum ada langkah. Tekan Run untuk menjalankan kodemu.</p>
+
+        <details class="pa-hint">
+          <summary>💡 Petunjuk</summary>
+          <p id="paLevelHint"></p>
+        </details>
+
+        <nav class="pa-levels" aria-label="Daftar level">
+          <span class="pa-levels__label">Level:</span>
+          <div class="pa-levels__list" id="paLevels"></div>
+        </nav>
+      </section>
+
+      <!-- Editor + tombol -->
+      <section class="pa-play" aria-labelledby="paEditorTitle">
+        <div class="pa-play__head">
+          <h2 id="paEditorTitle">Kodemu (Python)</h2>
+          <div class="pa-actions">
+            <button class="btn btn-primary" id="paRun" type="button">
+              ▶ Run <span class="pa-kbd" id="paRunHint">Ctrl+Enter</span>
+            </button>
+            <button class="btn" id="paStop" type="button">■ Stop</button>
+            <button class="btn" id="paReset" type="button">↺ Reset</button>
+            <button class="btn" id="paPause" type="button">⏸ Pause</button>
+            <button class="btn" id="paStep" type="button">⏭ Step</button>
+            <button class="btn btn-ghost" id="paHelp" type="button">📖 Fungsi</button>
+            <button class="btn btn-ghost" id="paRestoreStarter" type="button">Kode awal</button>
+            <button
+              class="btn btn-ghost"
+              id="paRetryPy"
+              type="button"
+              title="Buang worker lama lalu muat Python dari awal"
+              hidden
+            >
+              🔄 Coba lagi (muat ulang Python)
+            </button>
+          </div>
+        </div>
+
+        <div class="pa-speed">
+          <label for="paSpeed">Kecepatan animasi: <strong id="paSpeedLabel">1x</strong></label>
+          <input id="paSpeed" type="range" min="0" max="3" step="1" value="1" />
+          <span class="pa-speed__ticks" aria-hidden="true">
+            <span>0.5x</span><span>1x</span><span>2x</span><span>4x</span>
+          </span>
+        </div>
+
+        <div class="pa-editor" id="paEditor">
+          <div class="pa-gutter" id="paGutter" aria-hidden="true">
+            <div class="pa-gutter__line" data-line="1">1</div>
+          </div>
+          <label class="visually-hidden" for="paCode">Kode Python</label>
+          <textarea
+            id="paCode"
+            class="pa-code"
+            spellcheck="false"
+            autocapitalize="off"
+            autocomplete="off"
+            autocorrect="off"
+            wrap="off"
+            rows="12"
+            placeholder="# Tulis kodemu di sini, contoh:&#10;move_right(2)&#10;move_down()"
+          ></textarea>
+        </div>
+
+        <p class="pa-tip">
+          Tip: tombol <strong>Tab</strong> menyisipkan 4 spasi. Tekan <strong>Esc</strong> untuk
+          menghentikan kode yang berjalan.
+        </p>
+
+        <!-- Output & error -->
+        <h2 class="pa-subtitle">Output</h2>
+        <pre class="pa-output" id="paOutput" tabindex="0" aria-live="polite"></pre>
+
+        <div class="pa-error" id="paError" hidden role="alert">
+          <p class="pa-error__line" id="paErrorLine" hidden></p>
+          <p class="pa-error__friendly" id="paErrorFriendly"></p>
+          <details>
+            <summary>Detail teknis (traceback)</summary>
+            <pre id="paErrorTrace"></pre>
+          </details>
+        </div>
+
+        <p class="pa-note">
+          Python (Pyodide <strong>314.0.7</strong>) dimuat hanya di halaman ini. Sumber pertama
+          adalah salinan lokal <code>vendor/pyodide/</code> (tanpa internet); kalau tidak ada,
+          halaman beralih ke CDN <code>cdn.jsdelivr.net/pyodide</code> lalu
+          <code>unpkg.com</code>. Status pemuatan tampil di kanan atas (unduh → siapkan → siap),
+          dan berhenti otomatis setelah 45 detik dengan tombol “Coba lagi”.
+        </p>
+      </section>
+    </main>
+
+    <footer class="pa-footer">
+      <p>
+        <a href="../../index.html">← Kembali ke menu</a>
+        <span aria-hidden="true">•</span>
+        <a href="../water-sort/index.html">Main Water Sort</a>
+      </p>
+    </footer>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

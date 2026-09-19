@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Portal Game Kecil — Main game ringan langsung di browser</title>
+    <meta
+      name="description"
+      content="Portal game web statis berisi mini game edukatif: Water Sort (puzzle warna) dan Python Adventure (belajar Python dengan menggerakkan karakter)."
+    />
+    <link rel="stylesheet" href="./css/base.css" />
+    <link rel="stylesheet" href="./css/portal.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E%F0%9F%8E%AE%3C/text%3E%3C/svg%3E"
+    />
+  </head>
+  <body class="portal">
+    <a class="skip-link" href="#daftar-game">Langsung ke daftar game</a>
+
+    <header class="portal-header">
+      <div class="portal-header__inner">
+        <p class="portal-brand">
+          <span class="portal-brand__mark" aria-hidden="true">🎮</span>
+          <span>Portal Game Kecil</span>
+        </p>
+        <button
+          id="themeToggle"
+          class="btn btn-ghost portal-theme"
+          type="button"
+          aria-live="polite"
+        >
+          <span aria-hidden="true" id="themeIcon">🌗</span>
+          <span id="themeLabel">Tema: ikut sistem</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="portal-main">
+      <section class="portal-hero" aria-labelledby="judul-portal">
+        <h1 id="judul-portal">Dua game kecil, satu halaman ringan</h1>
+        <p class="portal-hero__lead">
+          Kumpulan mini game statis yang bisa dimainkan langsung di browser — tanpa
+          instalasi, tanpa backend, dan tanpa proses build. Semua dibuat dengan HTML,
+          CSS, dan JavaScript murni.
+        </p>
+        <ul class="portal-hero__facts">
+          <li>100% statis, siap di-deploy ke GitHub Pages</li>
+          <li>Bisa dimainkan di HP maupun laptop</li>
+          <li>Progres tersimpan otomatis di browser kamu</li>
+        </ul>
+      </section>
+
+      <section id="daftar-game" class="portal-games" aria-labelledby="judul-daftar">
+        <h2 id="judul-daftar" class="portal-section-title">Pilih game</h2>
+        <!-- Kartu game dirender oleh js/portal.js dari array GAMES -->
+        <ul class="portal-cards" id="gameList"></ul>
+      </section>
+    </main>
+
+    <footer class="portal-footer">
+      <p>
+        Dibuat untuk belajar: logika game dipisahkan dari tampilan supaya mudah diuji.
+        <a href="./games/water-sort/index.html">Water Sort</a> ·
+        <a href="./games/python-adventure/index.html">Python Adventure</a>
+      </p>
+      <p class="portal-footer__muted">
+        Python Adventure menjalankan Python asli di browser lewat Pyodide (dimuat dari
+        CDN hanya saat dibuka).
+      </p>
+    </footer>
+
+    <script type="module" src="./js/portal.js"></script>
+  </body>
+</html>
